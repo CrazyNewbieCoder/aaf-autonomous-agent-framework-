@@ -43,13 +43,37 @@ def install_dependencies():
     else:
         print(f"{G}[V] Все зависимости для старта присутствуют.{W}")
 
+def check_docker():
+    """Проверяет наличие установленного Docker и docker-compose в системе"""
+    print(f"\n{C}=== Шаг 0.5: Проверка Docker ==={W}")
+    time.sleep(1)
+    
+    try:
+        # Пытаемся вызвать docker --version
+        subprocess.run(["docker", "--version"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        
+        # Проверяем docker compose (или старый docker-compose)
+        try:
+            subprocess.run(["docker", "compose", "version"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            subprocess.run(["docker-compose", "--version"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            
+        print(f"{G}[V] Docker успешно обнаружен!{W}")
+        return True
+        
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        print(f"{R}[X] Критическая ошибка: Docker не найден в системе!{W}")
+        print(f"{Y}AAF использует Docker-песочницу для безопасности.{W}")
+        print("Пожалуйста, установите Docker Desktop: https://www.docker.com/products/docker-desktop/")
+        return False
+
 # Сначала ставим зависимости, потом импортируем их
 install_dependencies()
 from dotenv import load_dotenv  # noqa: E402
 
 def check_configs():
     print(f"\n{C}=== Шаг 1: Проверка конфигурации ==={W}")
-    time.sleep(3)
+    time.sleep(1)
     
     settings_path = Path("config/settings.yaml")
     settings_example = Path("config/settings.example.yaml")
@@ -75,8 +99,13 @@ def check_configs():
             print(f"{R}[X] Ошибка: Не найден файл .env.example{W}")
             return False
 
-    load_dotenv()
-    if not os.getenv("TG_API_ID_AGENT") or "your_tg_api_id" in os.getenv("TG_API_ID_AGENT"):
+    # Принудительно читаем файл .env, перезаписывая кэш
+    load_dotenv(dotenv_path=env_path, override=True)
+    
+    tg_id = str(os.getenv("TG_API_ID_AGENT", "")).strip()
+    tg_hash = str(os.getenv("TG_API_HASH_AGENT", "")).strip()
+
+    if not tg_id or "your_tg_api_id" in tg_id or not tg_hash or "your_tg_api_hash" in tg_hash:
         print(f"{R}[X] Ошибка: Заполните TG_API_ID_AGENT и TG_API_HASH_AGENT в файле .env!{W}")
         print("Получить их можно здесь: https://my.telegram.org/auth")
         return False
@@ -163,6 +192,10 @@ async def main():
     print(f"{C}================================================={W}\n")
     time.sleep(2)
     
+    # 0.5 Проверка Docker
+    if not check_docker():
+        return
+
     # 1. Сначала конфиги
     if not check_configs():
         return
