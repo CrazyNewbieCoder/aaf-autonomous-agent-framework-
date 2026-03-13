@@ -5,6 +5,13 @@ import shutil
 import asyncio
 import time
 from pathlib import Path
+import warnings
+
+# Блокировка спама в терминал от ИИ-библиотек
+os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
+os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
+os.environ["TQDM_DISABLE"] = "1" # Глобально убиваем прогресс-бары tqdm
+warnings.filterwarnings("ignore") # Полностью глушим желтые системные варнинги
 
 # ANSI цвета
 G = "\033[92m"
