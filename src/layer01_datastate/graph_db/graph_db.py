@@ -1,12 +1,15 @@
 import kuzu
 import asyncio
+from pathlib import Path
 from src.layer00_utils.logger import system_logger
 from config.config_manager import config
 from src.layer00_utils.watchdog.watchdog import graph_db_module
 from src.layer01_datastate.event_bus.event_bus import event_bus
 from src.layer01_datastate.event_bus.events import Events
 
-GRAPH_DB_PATH = config.memory.kuzu_db_path
+# Получаем абсолютный корень проекта (как в vector_db.py)
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+GRAPH_DB_PATH = str(PROJECT_ROOT / config.memory.kuzu_db_path)
 
 # Глобальные переменные для базы и соединения
 db = None
@@ -15,7 +18,9 @@ conn = None
 def _init_kuzu_sync():
     """Синхронная инициализация KuzuDB и создание схемы (если её нет)"""
     global db, conn
-    # os.makedirs(GRAPH_DB_PATH, exist_ok=True)
+    
+    # Пытаемся создать папку, если её нет
+    Path(GRAPH_DB_PATH).parent.mkdir(parents=True, exist_ok=True)
     
     db = kuzu.Database(GRAPH_DB_PATH)
     conn = kuzu.Connection(db)
