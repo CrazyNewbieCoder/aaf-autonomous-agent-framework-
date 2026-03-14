@@ -29,7 +29,6 @@ th0r3nt = None
 # >>>>> docker compose down - убить контейнеры
 # >>>>> docker compose logs agent_core -f - вывести логи
 
-
 class Gateway:
     def __init__(self):
         self.tasks = []
