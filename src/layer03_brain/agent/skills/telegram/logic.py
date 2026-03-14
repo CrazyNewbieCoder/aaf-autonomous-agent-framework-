@@ -4,23 +4,34 @@ from src.layer00_utils.config_manager import config
 from src.layer00_utils.workspace import (workspace_manager)
 from src.layer01_datastate.sql_db.management.dialogue import create_dialogue_entry
 from src.layer02_sensors.telegram.agent_account.client import agent_client
-
-from src.layer02_sensors.telegram.shared_tools.telethon_tools import (
-    tg_send_message, tg_reply_to_message, tg_get_recent_messages, 
-    tg_get_dialogs, tg_get_channel_posts, tg_get_chat_info,
-    tg_mark_as_read, tg_set_reaction, tg_search_channels, 
-    tg_join_channel, tg_comment_on_post, tg_get_unread_chats_summary,
-    tg_delete_message, tg_forward_message, tg_create_poll,
-    tg_get_post_comments, tg_change_bio, tg_get_poll_results,
-    tg_ban_user, tg_save_sticker_set, tg_unban_user, tg_get_banned_users,
-    tg_create_channel_post, tg_edit_message, tg_pin_message, tg_vote_in_poll,
-    tg_get_channel_subscribers, tg_check_user_in_chat, tg_send_voice_message,
-    tg_get_media, tg_send_sticker, tg_change_avatar, tg_create_channel, 
-    tg_update_channel_info, tg_set_channel_username, tg_promote_to_admin,
-    tg_change_account_name, tg_change_account_username, tg_create_discussion_group,
-    tg_set_typing_status, tg_leave_chat, tg_archive_chat, tg_create_supergroup, 
-    tg_invite_to_chat, tg_add_to_contacts, tg_get_chat_admins, tg_send_file,
-    tg_unarchive_chat, tg_search_chat_messages, tg_download_file, tg_change_channel_avatar
+from src.layer02_sensors.telegram.shared_tools.messages import (
+    tg_send_message, tg_reply_to_message, tg_delete_message, tg_forward_message, 
+    tg_edit_message, tg_pin_message, tg_set_typing_status
+)
+from src.layer02_sensors.telegram.shared_tools.history import (
+    tg_get_recent_messages, tg_get_dialogs, tg_get_channel_posts, 
+    tg_get_post_comments, tg_get_unread_chats_summary, tg_search_chat_messages, tg_mark_as_read
+)
+from src.layer02_sensors.telegram.shared_tools.media import (
+    tg_get_media, tg_send_voice_message, tg_send_file, tg_download_file, 
+    tg_send_sticker, tg_save_sticker_set
+)
+from src.layer02_sensors.telegram.shared_tools.management import (
+    tg_get_chat_info, tg_search_channels, tg_join_channel, tg_ban_user, 
+    tg_unban_user, tg_get_banned_users, tg_create_channel_post, 
+    tg_get_channel_subscribers, tg_check_user_in_chat, tg_create_channel, 
+    tg_update_channel_info, tg_set_channel_username, tg_promote_to_admin, 
+    tg_create_discussion_group, tg_leave_chat, tg_archive_chat, 
+    tg_unarchive_chat, tg_create_supergroup, tg_invite_to_chat, 
+    tg_get_chat_admins, tg_change_channel_avatar
+)
+from src.layer02_sensors.telegram.shared_tools.account import (
+    tg_change_bio, tg_change_avatar, tg_change_account_name, 
+    tg_change_account_username, tg_add_to_contacts
+)
+from src.layer02_sensors.telegram.shared_tools.interact import (
+    tg_set_reaction, tg_comment_on_post, tg_create_poll, 
+    tg_get_poll_results, tg_vote_in_poll
 )
 
 def _format_chat_source(chat_id: str | int, topic_id: int = None) -> str:
