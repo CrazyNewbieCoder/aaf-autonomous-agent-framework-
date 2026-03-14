@@ -5,6 +5,7 @@ import shutil
 import asyncio
 from pathlib import Path
 import warnings
+import socket
 
 os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
 os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
@@ -61,7 +62,7 @@ swarm:
 rhythms:
   proactivity_interval_sec: 900
   thoughts_interval_sec: 1800
-  min_proactivity_cooldown_sec: 600 # Увеличили до 10 минут
+  min_proactivity_cooldown_sec: 120
   reduction_medium_sec: 120
   reduction_low_sec: 60
   telemetry_poll_sec: 60
@@ -99,6 +100,13 @@ system:
     headless_mode: true  
 """
 
+def get_free_port():
+    """Просит у ОС любой свободный порт и возвращает его"""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(('', 0))
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        return s.getsockname()[1]
+
 def install_dependencies():
     print(f"{C}=== Шаг 0: Проверка зависимостей хоста ==={W}")
     required = {"dotenv": "python-dotenv", "telethon": "telethon", "sentence_transformers": "sentence-transformers", "pydantic": "pydantic", "yaml": "PyYAML"}
@@ -134,8 +142,22 @@ def setup_structure():
     
     if not env_path.exists():
         if env_example.exists():
-            shutil.copy(env_example, env_path)
-            print(f"{Y}[!] Создан файл .env из шаблона .env.example. Заполните его и перезапустите скрипт.{W}")
+            # 1. Читаем шаблон
+            env_content = env_example.read_text(encoding="utf-8")
+            
+            # 2. Находим свободный порт
+            free_port = get_free_port()
+            
+            # 3. Заменяем дефолтный порт на найденный свободный
+            # Ищем стандартные порты, которые могли быть в шаблоне, и меняем их
+            import re
+            env_content = re.sub(r"DB_PORT=\d+", f"DB_PORT={free_port}", env_content)
+            
+            # 4. Сохраняем в боевой .env
+            env_path.write_text(env_content, encoding="utf-8")
+            
+            print(f"{G}[V] Базе данных автоматически назначен свободный порт: {free_port}{W}")
+            print(f"{Y}[!] Создан файл .env. Заполните в нем API-ключи и перезапустите скрипт.{W}")
             return False
 
     for md_file in ["SOUL.md", "COMMUNICATION_STYLE.md", "EXAMPLES_OF_STYLE.md"]:
