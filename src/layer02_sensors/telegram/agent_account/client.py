@@ -5,7 +5,8 @@ from pathlib import Path
 from src.layer00_utils.config_manager import config
 from src.layer00_utils.logger import system_logger
 
-load_dotenv()
+env_path = Path(__file__).resolve().parents[4] / ".env"
+load_dotenv(dotenv_path=env_path)
 
 raw_api_id = os.getenv("TG_API_ID_AGENT")
 TG_API_HASH_AGENT = os.getenv("TG_API_HASH_AGENT", "")

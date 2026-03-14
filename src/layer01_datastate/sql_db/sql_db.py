@@ -2,13 +2,18 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, Asyn
 from sqlalchemy.orm import DeclarativeBase
 import os
 from dotenv import load_dotenv
+from pathlib import Path
 from src.layer00_utils.logger import system_logger
 from src.layer00_utils.watchdog.watchdog import sql_db_module
 from src.layer01_datastate.event_bus.event_bus import event_bus
 from src.layer01_datastate.event_bus.events import Events
 import asyncio
 
-load_dotenv()
+project_root = Path(__file__).resolve().parents[3]
+env_path = project_root / ".env"
+
+# Грузим .env по жесткому пути
+load_dotenv(dotenv_path=env_path)
 
 # Настройки подключения
 SQL_DB_URL = os.getenv("SQL_DB_URL")

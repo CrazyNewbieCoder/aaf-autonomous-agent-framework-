@@ -21,9 +21,9 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock 
       - ./workspace:/app/workspace
-      - ./logs:/app/logs
+      - ./src/logs:/app/src/logs
       - ./src:/app/src
-      - ./local_models:/app/local_models
+      - ./src/layer00_utils/local_models:/app/src/layer00_utils/local_models
       - ./config:/app/config
 
 volumes:

@@ -5,8 +5,10 @@ from dotenv import load_dotenv
 from openai import AsyncOpenAI
 from datetime import datetime, timezone, timedelta
 from src.layer00_utils.logger import system_logger
+from pathlib import Path
 
-load_dotenv() 
+env_path = Path(__file__).resolve().parents[3] / ".env"
+load_dotenv(dotenv_path=env_path)
 
 API_URL = os.getenv("API_URL")
 

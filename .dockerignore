@@ -4,10 +4,10 @@ venv
 .venv
 __pycache__
 .env
-chroma_db/
-telegram_sessions/
-kuzu_db
-local_models/
+workspace/_data/chroma_db
+workspace/_data/telegram_sessions
+workspace/_data/kuzu_db
+src/layer00_utils/local_models
 
 TODO.md
 copy_all_code.py

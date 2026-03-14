@@ -1,9 +1,11 @@
 from datetime import datetime, timedelta
 import os
 from src.layer00_utils.config_manager import config
-from src.layer00_utils.workspace import (workspace_manager)
+from src.layer00_utils.workspace import workspace_manager
 from src.layer01_datastate.sql_db.management.dialogue import create_dialogue_entry
 from src.layer02_sensors.telegram.agent_account.client import agent_client
+from src.layer03_brain.agent.skills.auto_schema import llm_skill
+
 from src.layer02_sensors.telegram.shared_tools.messages import (
     tg_send_message, tg_reply_to_message, tg_delete_message, tg_forward_message, 
     tg_edit_message, tg_pin_message, tg_set_typing_status
@@ -42,10 +44,21 @@ def _format_chat_source(chat_id: str | int, topic_id: int = None) -> str:
         return f"tg_agent_group_({clean_id}){topic_str}"
     return f"tg_agent_chat_({clean_id}){topic_str}"
 
-# НАВЫКИ
+# =====================================================================
+# НАВЫКИ TELEGRAM
+# =====================================================================
 
+@llm_skill(
+    description="Отправляет текстовое сообщение в Telegram чат/канал/ЛС.",
+    parameters={
+        "chat_id": "ID чата или @username.",
+        "text": "Текст сообщения.",
+        "topic_id": "(Опционально) ID топика в супергруппе.",
+        "silent": "(Опционально) Отправить без звука (True/False).",
+        "delay_seconds": "(Опционально) Отложить отправку на N секунд."
+    }
+)
 async def send_message_as_agent(chat_id: str, text: str, topic_id: int = None, silent: bool = False, delay_seconds: int = 0) -> str:
-    """Обертка: отправляет сообщение (с поддержкой silent и отложки)"""
     schedule_date = None
     if delay_seconds > 0:
         schedule_date = datetime.now() + timedelta(seconds=delay_seconds)
@@ -59,209 +72,465 @@ async def send_message_as_agent(chat_id: str, text: str, topic_id: int = None, s
     await create_dialogue_entry(actor=config.identity.agent_name, message=f"{silent_str}{delay_str} {text}".strip(), source=chat_source)
     return result
 
+@llm_skill(
+    description="Отправляет статус 'Печатает...' или 'Записывает аудио...' в чат (длится ~5 секунд).",
+    parameters={
+        "chat_id": "ID чата или @username.",
+        "action": {"description": "Тип действия", "enum": ["typing", "record-audio"]}
+    }
+)
 async def set_chat_typing_status_as_agent(chat_id: str, action: str = "typing") -> str:
-    """Обертка: Отправляет статус 'Печатает...' или 'Записывает аудио...' (длится ~5 секунд)"""
     return await tg_set_typing_status(agent_client, chat_id, action)
 
+@llm_skill(
+    description="Покидает Telegram-чат или канал.",
+    parameters={"chat_id": "ID чата или @username."}
+)
 async def leave_chat_as_agent(chat_id: str) -> str:
-    """Обертка: покидает Telegram-чат"""
     return await tg_leave_chat(agent_client, chat_id)
 
+@llm_skill(
+    description="Отправляет чат в архив Telegram.",
+    parameters={"chat_id": "ID чата или @username."}
+)
 async def archive_chat_as_agent(chat_id: str) -> str:
-    """Обертка: архивирует Telegram-чат"""
     return await tg_archive_chat(agent_client, chat_id)
 
+@llm_skill(
+    description="Читает последние сообщения из чата/топика.",
+    parameters={
+        "chat_id": "ID чата или @username.",
+        "limit": "Количество сообщений (по умолчанию 50).",
+        "topic_id": "(Опционально) ID топика."
+    }
+)
 async def read_chat_as_agent(chat_id: str, limit: int = 50, topic_id: int = None) -> str:
-    """Обертка: читает последние n сообщений с чата"""
     return await tg_get_recent_messages(agent_client, chat_id, limit, topic_id)
 
+@llm_skill(
+    description="Получает список последних диалогов/групп со статусами прочтения.",
+    parameters={"limit": "Количество диалогов (по умолчанию 30)."}
+)
 async def get_dialogs_as_agent(limit: int = 30) -> str:
-    """Обертка: получает список последних диалогов/групп"""
     return await tg_get_dialogs(agent_client, limit)
 
+@llm_skill(
+    description="Отвечает на конкретное сообщение в чате.",
+    parameters={
+        "chat_id": "ID чата или @username.",
+        "message_id": "ID сообщения, на которое нужно ответить.",
+        "text": "Текст ответа."
+    }
+)
 async def reply_to_message_as_agent(chat_id: str, message_id: int, text: str) -> str:
-    """Обертка: отвечает на конкретное сообщение"""
     chat_source = _format_chat_source(chat_id)
     await create_dialogue_entry(actor=config.identity.agent_name, message=text, source=chat_source)
     return await tg_reply_to_message(agent_client, chat_id, message_id, text)
 
+@llm_skill(
+    description="Получает последние посты из Telegram-канала.",
+    parameters={
+        "channel_name": "ID канала или @username.",
+        "limit": "Количество постов (по умолчанию 10)."
+    }
+)
 async def get_channel_posts_as_agent(channel_name: str, limit: int = 10) -> str:
-    """Обертка: получает последние посты из канала"""
     return await tg_get_channel_posts(agent_client, channel_name, limit)
 
+@llm_skill(
+    description="Получает полную информацию (Bio, участники) о чате или пользователе.",
+    parameters={"chat_id": "ID чата/пользователя или @username."}
+)
 async def get_chat_info_as_agent(chat_id: str) -> str:
-    """Обертка: получает полную информацию (Bio, участники) о чате/юзере"""
     return await tg_get_chat_info(agent_client, chat_id)
 
+@llm_skill(
+    description="Принудительно помечает чат как прочитанный.",
+    parameters={"chat_id": "ID чата или @username."}
+)
 async def mark_chat_as_read_as_agent(chat_id: str) -> str:
-    """Обертка: помечает чат как прочитанный"""
     return await tg_mark_as_read(agent_client, chat_id)
 
+@llm_skill(
+    description="Ставит эмодзи-реакцию на сообщение.",
+    parameters={
+        "chat_id": "ID чата или @username.",
+        "message_id": "ID сообщения.",
+        "emoticon": "Сам эмодзи (например: '👍', '❤️', '🔥')."
+    }
+)
 async def set_message_reaction_as_agent(chat_id: str, message_id: int, emoticon: str) -> str:
-    """Обертка: ставит реакцию на сообщение"""
     chat_source = _format_chat_source(chat_id)
     await create_dialogue_entry(actor=config.identity.agent_name, message=f"[Поставлена реакция {emoticon} на сообщение ID {message_id}]", source=chat_source)
     return await tg_set_reaction(agent_client, chat_id, message_id, emoticon)
 
+@llm_skill(
+    description="Ищет публичные каналы и группы в глобальном поиске Telegram.",
+    parameters={
+        "query": "Поисковый запрос.",
+        "limit": "Количество результатов (по умолчанию 5)."
+    }
+)
 async def search_telegram_channels_as_agent(query: str, limit: int = 5) -> str:
-    """Обертка: ищет каналы в ТГ"""
     return await tg_search_channels(agent_client, query, limit)
 
+@llm_skill(
+    description="Вступает в Telegram-канал или группу по ссылке или юзернейму.",
+    parameters={"link_or_username": "Ссылка (t.me/...) или @username."}
+)
 async def join_telegram_channel_as_agent(link_or_username: str) -> str:
-    """Обертка: вступает в канал"""
     return await tg_join_channel(agent_client, link_or_username)
 
+@llm_skill(
+    description="Оставляет комментарий под постом в канале.",
+    parameters={
+        "channel_id": "ID канала или @username.",
+        "message_id": "ID поста.",
+        "text": "Текст комментария."
+    }
+)
 async def comment_on_post_as_agent(channel_id: str, message_id: int, text: str) -> str:
-    """Обертка: оставляет комментарий под постом в канале"""
     chat_source = _format_chat_source(channel_id)
     await create_dialogue_entry(actor=config.identity.agent_name, message=f"[Комментарий к посту {message_id}]: {text}", source=chat_source)
     return await tg_comment_on_post(agent_client, channel_id, message_id, text)
 
+@llm_skill(
+    description="Возвращает список чатов ТОЛЬКО с непрочитанными сообщениями."
+)
 async def get_unread_tg_summary() -> str:
-    """Вспомогательная функция для контекста: возвращает список чатов с непрочитанными сообщениями"""
     return await tg_get_unread_chats_summary(agent_client)
 
+@llm_skill(
+    description="Удаляет сообщение в чате.",
+    parameters={
+        "chat_id": "ID чата или @username.",
+        "message_id": "ID сообщения для удаления."
+    }
+)
 async def delete_message_as_agent(chat_id: str, message_id: int) -> str:
-    """Обертка: удаляет сообщение"""
     chat_source = _format_chat_source(chat_id)
     await create_dialogue_entry(actor=config.identity.agent_name, message=f"[Системное действие: Удаление своего сообщения ID {message_id}]", source=chat_source)
     return await tg_delete_message(agent_client, chat_id, message_id)
 
+@llm_skill(
+    description="Пересылает сообщение из одного чата в другой.",
+    parameters={
+        "from_chat": "Откуда переслать (ID или @username).",
+        "message_id": "ID сообщения.",
+        "to_chat": "Куда переслать (ID или @username)."
+    }
+)
 async def forward_message_as_agent(from_chat: str, message_id: int, to_chat: str) -> str:
-    """Обертка: пересылает сообщение"""
-    chat_source = _format_chat_source(to_chat) # Логируем туда, КУДА переслали
+    chat_source = _format_chat_source(to_chat)
     await create_dialogue_entry(actor=config.identity.agent_name, message=f"[Системное действие: Пересылка сообщения ID {message_id} из чата {from_chat}]", source=chat_source)
     return await tg_forward_message(agent_client, from_chat, message_id, to_chat)
 
+@llm_skill(
+    description="Создает опрос в чате/канале.",
+    parameters={
+        "chat_id": "ID чата или @username.",
+        "question": "Вопрос опроса.",
+        "options": "Список вариантов ответов."
+    }
+)
 async def create_poll_as_agent(chat_id: str, question: str, options: list) -> str:
-    """Обертка: создает опрос"""
     return await tg_create_poll(agent_client, chat_id, question, options)
 
+@llm_skill(
+    description="Читает комментарии к конкретному посту в канале.",
+    parameters={
+        "channel_name": "ID канала или @username.",
+        "message_id": "ID поста.",
+        "limit": "Количество комментариев (по умолчанию 20)."
+    }
+)
 async def get_post_comments_as_agent(channel_name: str, message_id: int, limit: int = 20) -> str:
-    """Обертка: читает комментарии"""
     return await tg_get_post_comments(agent_client, channel_name, message_id, limit)
 
+@llm_skill(
+    description="Изменяет раздел 'О себе' (Bio) твоего профиля.",
+    parameters={"new_bio": "Новый текст (максимум 70 символов)."}
+)
 async def change_my_bio_as_agent(new_bio: str) -> str:
-    """Обертка: меняет био"""
     return await tg_change_bio(agent_client, new_bio)
 
+@llm_skill(
+    description="Получает текущие результаты опроса.",
+    parameters={
+        "chat_id": "ID чата или @username.",
+        "message_id": "ID сообщения с опросом."
+    }
+)
 async def get_poll_results_as_agent(chat_id: str, message_id: int) -> str:
-    """Обертка: результаты опроса"""
     return await tg_get_poll_results(agent_client, chat_id, message_id)
 
+@llm_skill(
+    description="Банит пользователя в группе/канале ИЛИ добавляет в глобальный ЧС (если chat_id = 'global').",
+    parameters={
+        "chat_id": "ID чата или 'global'.",
+        "user_id": "ID пользователя или @username.",
+        "reason": "(Опционально) Причина бана."
+    }
+)
 async def ban_user_as_agent(chat_id: str, user_id: str, reason: str = "Нарушение правил") -> str:
-    """Обертка: бан пользователя"""
     return await tg_ban_user(agent_client, chat_id, user_id, reason)
 
+@llm_skill(
+    description="Добавляет стикерпак в твою коллекцию.",
+    parameters={"short_name": "Короткое имя стикерпака или ссылка на него."}
+)
 async def save_sticker_pack_as_agent(short_name: str) -> str:
-    """Обертка: сохранение стикеров"""
     return await tg_save_sticker_set(agent_client, short_name)
 
+@llm_skill(
+    description="Разбанивает пользователя.",
+    parameters={
+        "chat_id": "ID чата или 'global'.",
+        "user_id": "ID пользователя или @username."
+    }
+)
 async def unban_user_as_agent(chat_id: str, user_id: str) -> str:
-    """Обертка: разбан пользователя"""
     return await tg_unban_user(agent_client, chat_id, user_id)
 
+@llm_skill(
+    description="Возвращает список забаненных пользователей в чате или глобальном ЧС.",
+    parameters={
+        "chat_id": "ID чата или 'global'.",
+        "limit": "Количество пользователей (по умолчанию 50)."
+    }
+)
 async def get_banned_users_as_agent(chat_id: str, limit: int = 50) -> str:
-    """Обертка: просмотр забаненных"""
     return await tg_get_banned_users(agent_client, chat_id, limit)
 
+@llm_skill(
+    description="Отправляет новый пост в твой Telegram-канал.",
+    parameters={
+        "channel_id": "ID канала или @username.",
+        "text": "Текст поста."
+    }
+)
 async def create_channel_post_as_agent(channel_id: str, text: str) -> str:
-    """Обертка: публикует пост в канал"""
     chat_source = _format_chat_source(channel_id)
     await create_dialogue_entry(actor=config.identity.agent_name, message=f"[Опубликован пост]: {text}", source=chat_source)
     return await tg_create_channel_post(agent_client, channel_id, text)
 
+@llm_skill(
+    description="Редактирует отправленное сообщение или пост.",
+    parameters={
+        "chat_id": "ID чата или @username.",
+        "message_id": "ID сообщения.",
+        "new_text": "Новый текст сообщения."
+    }
+)
 async def edit_message_as_agent(chat_id: str, message_id: int, new_text: str) -> str:
-    """Обертка: редактирует сообщение/пост"""
     chat_source = _format_chat_source(chat_id)
     await create_dialogue_entry(actor=config.identity.agent_name, message=f"[Редактирование сообщения ID {message_id}]: {new_text}", source=chat_source)
     return await tg_edit_message(agent_client, chat_id, message_id, new_text)
 
+@llm_skill(
+    description="Закрепляет сообщение в чате/канале.",
+    parameters={
+        "chat_id": "ID чата или @username.",
+        "message_id": "ID сообщения для закрепления."
+    }
+)
 async def pin_message_as_agent(chat_id: str, message_id: int) -> str:
-    """Обертка: закрепляет сообщение"""
     chat_source = _format_chat_source(chat_id)
     await create_dialogue_entry(actor=config.identity.agent_name, message=f"[Системное действие: Закрепление сообщения ID {message_id}]", source=chat_source)
     return await tg_pin_message(agent_client, chat_id, message_id)
 
+@llm_skill(
+    description="Голосует в опросе.",
+    parameters={
+        "chat_id": "ID чата или @username.",
+        "message_id": "ID сообщения с опросом.",
+        "options": "Список вариантов ответов, за которые нужно проголосовать."
+    }
+)
 async def vote_in_poll_as_agent(chat_id: str, message_id: int, options: list) -> str:
-    """Обертка: голосует в опросе"""
     return await tg_vote_in_poll(agent_client, chat_id, message_id, options)
 
+@llm_skill(
+    description="Получает список подписчиков канала или группы.",
+    parameters={
+        "chat_id": "ID чата или @username.",
+        "limit": "Количество подписчиков (по умолчанию 50)."
+    }
+)
 async def get_channel_subscribers_as_agent(chat_id: str, limit: int = 50) -> str:
-    """Обертка: получает список подписчиков"""
     return await tg_get_channel_subscribers(agent_client, chat_id, limit)
 
+@llm_skill(
+    description="Проверяет, есть ли конкретный пользователь в канале/группе.",
+    parameters={
+        "chat_id": "ID чата или @username.",
+        "query": "Имя или юзернейм для поиска."
+    }
+)
 async def check_user_in_chat_as_agent(chat_id: str, query: str) -> str:
-    """Обертка: проверяет наличие юзера в чате"""
     return await tg_check_user_in_chat(agent_client, chat_id, query)
 
+@llm_skill(
+    description="Генерирует аудио из текста и отправляет как голосовое сообщение.",
+    parameters={
+        "chat_id": "ID чата или @username.",
+        "text": "Текст для озвучки и отправки."
+    }
+)
 async def send_voice_message_as_agent(chat_id: str, text: str) -> str:
-    """Обертка: отправляет голосовое сообщение в чат"""
     result = await tg_send_voice_message(agent_client, chat_id, text)
     chat_source = _format_chat_source(chat_id)
     await create_dialogue_entry(actor=config.identity.agent_name, message=f"[Голосовое сообщение]: {text}", source=chat_source)
     return result
 
+@llm_skill(
+    description="Скачивает медиа (фото, гс, кружок, стикер) из сообщения и возвращает его текстовое описание (Vision/Audio).",
+    parameters={
+        "chat_id": "ID чата или @username.",
+        "message_id": "ID сообщения с медиа."
+    }
+)
 async def get_tg_media_as_agent(chat_id: str, message_id: int) -> dict | str:
-    """Обертка: скачивает медиа (фото, гс, кружок, стикер, превью видео) и кидает в ReAct цикл"""
     result = await tg_get_media(agent_client, chat_id, message_id)
     return result
 
+@llm_skill(
+    description="Отправляет стикер, соответствующий переданному эмодзи.",
+    parameters={
+        "chat_id": "ID чата или @username.",
+        "emoji": "Эмодзи (например, '👍')."
+    }
+)
 async def send_tg_sticker_as_agent(chat_id: str, emoji: str) -> str:
-    """Обертка: отправляет стикер по эмодзи"""
     result = await tg_send_sticker(agent_client, chat_id, emoji)
     chat_source = _format_chat_source(chat_id)
     await create_dialogue_entry(actor=config.identity.agent_name, message=f"[Отправлен стикер, соответствующий эмодзи: {emoji}]", source=chat_source)
     return result
 
+@llm_skill(
+    description="Меняет аватарку твоего профиля на локальный файл.",
+    parameters={"image_path": "Путь к изображению."}
+)
 async def change_tg_avatar_as_agent(image_path: str) -> str:
-    """Обертка: меняет аватарку профиля"""
     return await tg_change_avatar(agent_client, image_path)
 
+@llm_skill(
+    description="Создает новый Telegram-канал.",
+    parameters={
+        "title": "Название канала.",
+        "about": "(Опционально) Описание канала."
+    }
+)
 async def create_telegram_channel_as_agent(title: str, about: str = "") -> str:
-    """Обертка: создает канал"""
     result = await tg_create_channel(agent_client, title, about)
     await create_dialogue_entry(actor=config.identity.agent_name, message=f"[Системное действие: Создан новый канал '{title}']", source="system")
     return result
 
+@llm_skill(
+    description="Изменяет название и/или описание канала.",
+    parameters={
+        "channel_id": "ID канала или @username.",
+        "new_title": "(Опционально) Новое название.",
+        "new_about": "(Опционально) Новое описание."
+    }
+)
 async def update_channel_info_as_agent(channel_id: str, new_title: str = None, new_about: str = None) -> str:
-    """Обертка: обновляет инфу канала"""
     return await tg_update_channel_info(agent_client, channel_id, new_title, new_about)
 
+@llm_skill(
+    description="Устанавливает публичный юзернейм для канала (делает его публичным).",
+    parameters={
+        "channel_id": "ID канала.",
+        "username": "Желаемый @username."
+    }
+)
 async def set_channel_username_as_agent(channel_id: str, username: str) -> str:
-    """Обертка: ставит публичный юзернейм"""
     return await tg_set_channel_username(agent_client, channel_id, username)
 
+@llm_skill(
+    description="Выдает пользователю полные права администратора в канале/группе.",
+    parameters={
+        "channel_id": "ID канала/группы.",
+        "user_id": "ID пользователя или @username."
+    }
+)
 async def promote_user_to_admin_as_agent(channel_id: str, user_id: str) -> str:
-    """Обертка: выдает права админа"""
     return await tg_promote_to_admin(agent_client, channel_id, user_id)
 
+@llm_skill(
+    description="Изменяет имя и фамилию твоего аккаунта.",
+    parameters={
+        "first_name": "Новое имя.",
+        "last_name": "(Опционально) Новая фамилия."
+    }
+)
 async def change_account_name_as_agent(first_name: str, last_name: str = "") -> str:
-    """Обертка: меняет имя аккаунта"""
     return await tg_change_account_name(agent_client, first_name, last_name)
 
+@llm_skill(
+    description="Изменяет @username твоего аккаунта.",
+    parameters={"username": "Новый @username."}
+)
 async def change_account_username_as_agent(username: str) -> str:
-    """Обертка: меняет юзернейм аккаунта"""
     return await tg_change_account_username(agent_client, username)
 
+@llm_skill(
+    description="Создает супергруппу и привязывает её к каналу для комментариев.",
+    parameters={
+        "channel_id": "ID канала или @username.",
+        "group_title": "Название группы для комментариев."
+    }
+)
 async def create_discussion_group_as_agent(channel_id: str, group_title: str) -> str:
-    """Обертка: создает привязанную группу для комментариев"""
     return await tg_create_discussion_group(agent_client, channel_id, group_title)
 
+@llm_skill(
+    description="Создает новую супергруппу.",
+    parameters={
+        "title": "Название супергруппы.",
+        "about": "(Опционально) Описание."
+    }
+)
 async def create_supergroup_as_agent(title: str, about: str = "") -> str:
     return await tg_create_supergroup(agent_client, title, about)
 
+@llm_skill(
+    description="Приглашает пользователя в группу/канал.",
+    parameters={
+        "chat_id": "ID чата или @username.",
+        "user_id": "ID пользователя или @username."
+    }
+)
 async def invite_user_to_chat_as_agent(chat_id: str, user_id: str) -> str:
     return await tg_invite_to_chat(agent_client, chat_id, user_id)
 
+@llm_skill(
+    description="Добавляет пользователя в контакты твоего аккаунта.",
+    parameters={
+        "user_id": "ID пользователя или @username.",
+        "first_name": "Имя контакта.",
+        "last_name": "(Опционально) Фамилия контакта."
+    }
+)
 async def add_user_to_contacts_as_agent(user_id: str, first_name: str, last_name: str = "") -> str:
     return await tg_add_to_contacts(agent_client, user_id, first_name, last_name)
 
+@llm_skill(
+    description="Получает список администраторов чата/канала.",
+    parameters={"chat_id": "ID чата или @username."}
+)
 async def get_chat_admins_as_agent(chat_id: str) -> str:
     return await tg_get_chat_admins(agent_client, chat_id)
 
+@llm_skill(
+    description="Отправляет файл из твоей песочницы в Telegram.",
+    parameters={
+        "chat_id": "ID чата или @username.",
+        "filename": "Имя файла из песочницы.",
+        "caption": "(Опционально) Подпись к файлу."
+    }
+)
 async def send_file_to_tg_chat_as_agent(chat_id: str, filename: str, caption: str = "") -> str:
-    """Обертка: отправляет файл из песочницы в Telegram"""
     try:
         clean_filename = os.path.basename(filename.replace("file:///", "").replace("/app/", ""))
         filepath = workspace_manager.get_sandbox_file(clean_filename)
@@ -277,23 +546,46 @@ async def send_file_to_tg_chat_as_agent(chat_id: str, filename: str, caption: st
     except Exception as e:
         return f"Системная ошибка при отправке файла: {e}"
     
+@llm_skill(
+    description="Возвращает чат из архива.",
+    parameters={"chat_id": "ID чата или @username."}
+)
 async def unarchive_tg_chat_as_agent(chat_id: str) -> str:
-    """Обертка: возвращает чат из архива"""
     return await tg_unarchive_chat(agent_client, chat_id)
 
+@llm_skill(
+    description="Ищет сообщения в чате по тексту или автору.",
+    parameters={
+        "chat_id": "ID чата или @username.",
+        "query": "(Опционально) Текст для поиска.",
+        "from_user": "(Опционально) ID пользователя или @username.",
+        "limit": "Количество результатов (по умолчанию 20)."
+    }
+)
 async def search_chat_messages_as_agent(chat_id: str, query: str = None, from_user: str = None, limit: int = 20) -> str:
-    """Обертка: ищет сообщения в чате по тексту или автору"""
     return await tg_search_chat_messages(agent_client, chat_id, query, from_user, limit)
 
+@llm_skill(
+    description="Скачивает файл/документ из сообщения Telegram в твою песочницу.",
+    parameters={
+        "chat_id": "ID чата или @username.",
+        "message_id": "ID сообщения с файлом."
+    }
+)
 async def download_file_from_tg_as_agent(chat_id: str, message_id: int) -> str:
-    """Обертка: скачивает файл из ТГ в песочницу"""
     result = await tg_download_file(agent_client, chat_id, message_id)
     chat_source = _format_chat_source(chat_id)
     await create_dialogue_entry(actor=config.identity.agent_name, message=f"[Системное действие: Скачивание файла из сообщения ID {message_id}]", source=chat_source)
     return result
 
+@llm_skill(
+    description="Меняет аватарку канала на файл из песочницы.",
+    parameters={
+        "channel_id": "ID канала или @username.",
+        "filename": "Имя файла изображения из песочницы."
+    }
+)
 async def change_channel_avatar_as_agent(channel_id: str, filename: str) -> str:
-    """Обертка: меняет аватарку канала"""
     try:
         clean_filename = os.path.basename(filename.replace("file:///", "").replace("/app/", ""))
         filepath = workspace_manager.get_sandbox_file(clean_filename)
@@ -304,79 +596,3 @@ async def change_channel_avatar_as_agent(channel_id: str, filename: str) -> str:
         return result
     except Exception as e:
         return f"Ошибка обработки пути к файлу: {e}"
-
-TELEGRAM_REGISTRY = {
-    # Работа сообщениями
-    "send_message_as_agent": send_message_as_agent,
-    "reply_to_message_as_agent": reply_to_message_as_agent,
-    "delete_message_as_agent": delete_message_as_agent,
-    "forward_message_as_agent": forward_message_as_agent,
-    "edit_message_as_agent": edit_message_as_agent,
-    "pin_message_as_agent": pin_message_as_agent,
-
-    # Медиа (изображение, аудио, видео, файлы)
-    "get_tg_media_as_agent": get_tg_media_as_agent,
-    "send_voice_message_as_agent": send_voice_message_as_agent,
-    "send_file_to_tg_chat_as_agent": send_file_to_tg_chat_as_agent,
-    "download_file_from_tg_as_agent": download_file_from_tg_as_agent,
-    "change_channel_avatar_as_agent": change_channel_avatar_as_agent,
-
-    # Реакции
-    "set_message_reaction_as_agent": set_message_reaction_as_agent,
-
-    # Чаты
-    "read_chat_as_agent": read_chat_as_agent,
-    "get_dialogs_as_agent": get_dialogs_as_agent,
-    "get_chat_info_as_agent": get_chat_info_as_agent,
-    "mark_chat_as_read_as_agent": mark_chat_as_read_as_agent,
-    "set_chat_typing_status_as_agent": set_chat_typing_status_as_agent,
-    "leave_chat_as_agent": leave_chat_as_agent,
-    "archive_chat_as_agent": archive_chat_as_agent,
-    "unarchive_tg_chat_as_agent": unarchive_tg_chat_as_agent,
-    "search_chat_messages_as_agent": search_chat_messages_as_agent,
-
-    # Работа с каналами
-    "get_channel_posts_as_agent": get_channel_posts_as_agent,
-    "search_telegram_channels_as_agent": search_telegram_channels_as_agent,
-    "join_telegram_channel_as_agent": join_telegram_channel_as_agent,
-    "comment_on_post_as_agent": comment_on_post_as_agent,
-    "get_post_comments_as_agent": get_post_comments_as_agent,
-    "create_channel_post_as_agent": create_channel_post_as_agent,
-    "create_telegram_channel_as_agent": create_telegram_channel_as_agent,
-    "update_channel_info_as_agent": update_channel_info_as_agent,
-    "set_channel_username_as_agent": set_channel_username_as_agent,
-    "promote_user_to_admin_as_agent": promote_user_to_admin_as_agent,
-    "create_discussion_group_as_agent": create_discussion_group_as_agent,
-    "get_chat_admins_as_agent": get_chat_admins_as_agent,
-
-    # Работа с группами
-    "create_supergroup_as_agent": create_supergroup_as_agent,
-
-    # Работа с подписчиками
-    "get_channel_subscribers_as_agent": get_channel_subscribers_as_agent,
-    "check_user_in_chat_as_agent": check_user_in_chat_as_agent,
-
-    # Работа с опросами
-    "create_poll_as_agent": create_poll_as_agent,
-    "get_poll_results_as_agent": get_poll_results_as_agent,
-    "vote_in_poll_as_agent": vote_in_poll_as_agent,
-    
-    # Изменение статуса/Bio
-    "change_my_bio_as_agent": change_my_bio_as_agent,
-
-    # Работа с ЧС/банами
-    "ban_user_as_agent": ban_user_as_agent,
-    "unban_user_as_agent": unban_user_as_agent,
-    "get_banned_users_as_agent": get_banned_users_as_agent,
-
-    # Стикеры
-    "save_sticker_pack_as_agent": save_sticker_pack_as_agent,
-    "send_tg_sticker_as_agent": send_tg_sticker_as_agent,
-
-    # Свой аккаунт
-    "change_tg_avatar_as_agent": change_tg_avatar_as_agent,
-    "change_account_name_as_agent": change_account_name_as_agent,
-    "change_account_username_as_agent": change_account_username_as_agent,
-    "invite_user_to_chat_as_agent": invite_user_to_chat_as_agent,
-    "add_user_to_contacts_as_agent": add_user_to_contacts_as_agent,
-}
