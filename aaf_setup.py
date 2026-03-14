@@ -136,6 +136,7 @@ def setup_structure():
         if env_example.exists():
             shutil.copy(env_example, env_path)
             print(f"{Y}[!] Создан файл .env из шаблона .env.example. Заполните его и перезапустите скрипт.{W}")
+            return False
 
     for md_file in ["SOUL.md", "COMMUNICATION_STYLE.md", "EXAMPLES_OF_STYLE.md"]:
         p = Path(f"config/personality/{md_file}")

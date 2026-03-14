@@ -107,7 +107,8 @@ async def _execute_single_tool(tool_call) -> dict:
     if func_name in skills_registry:
         limit = 800
 
-        args_str = str(func_args)
+        # Заменяем переносы строк на экранированные \n, чтобы логгер не ломался
+        args_str = str(func_args).replace('\n', '\\n')
         if len(args_str) > limit:
             args_str = args_str[:limit] + "... [Обрезано]"
 
@@ -123,7 +124,8 @@ async def _execute_single_tool(tool_call) -> dict:
                 # Запускаем синхронный код в фоне, не блокируя асинхронный мозг
                 result = await asyncio.to_thread(skills_registry[func_name], **func_args)
 
-            result_str = str(result)
+            # FIX: Экранируем переносы строк и в результате
+            result_str = str(result).replace('\n', '\\n')
             system_logger.info(f"[Agent Action Result] {result_str[:limit] + ('... [Обрезано]' if len(result_str) > limit else '')}")
 
         except Exception as e:
