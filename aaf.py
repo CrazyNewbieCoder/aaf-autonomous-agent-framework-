@@ -313,6 +313,33 @@ def generate_docker_compose():
         f.write("# Используйте `python aaf.py generate` для обновления этого файла.\n\n")
         yaml.dump(compose, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
 
+def print_agent_setup_guide(name):
+    print(f"\n{G}=================================================={W}")
+    print(f"{G}      🚀 ПРОФИЛЬ {name.upper()} ГОТОВ К НАСТРОЙКЕ {W}")
+    print(f"{G}=================================================={W}")
+    
+    print(f"{Y}[!] ШАГ 1: API КЛЮЧИ И МОДЕЛИ{W}")
+    print(f"    Отредактируйте: {C}Agents/{name}/.env{W}")
+    print( "    Указать API-ключи.")
+
+    print(f"\n{Y}[!] ШАГ 2: АВТОРИЗАЦИЯ ТЕЛЕГРАМ{W}")
+    print(f"    Выполните: {C}python aaf.py auth {name}{W}") 
+    print("     (Это создаст файл сессии .session)")
+    print( "    Либо положите уже готовый файл .session в workspace/_data/telegram_sessions, предварительно переименовав файл сессии в agent_session.session")
+
+    print(f"\n{Y}[!] ШАГ 3: КОНФИГУРАЦИЯ СИСТЕМЫ{W}")
+    print(f"    Файл: {C}Agents/{name}/config/settings.yaml{W}")
+    print( "    Укажите ваше имя и ID вашего аккаунта в телеграм.")
+
+    print(f"\n{Y}[!] ШАГ 4: PERSONALITY PROMPT{W}")
+    print(f"    Файл: {C}Agents/{name}/config/personality/*.md{W}")
+    print( "    Откройте три файла .md и определите роль агента, его стиль общения и задачи.")
+
+    print(f"\n{Y}[!] ШАГ 5: ЗАПУСК{W}")
+    print(f"    Команда: {C}python aaf.py start {name}{W}")
+    
+    print(f"{G}=================================================={W}\n")
+
 def create_agent(name: str):
     name = name.upper()
     agent_dir = os.path.join("Agents", name)
@@ -346,11 +373,7 @@ def create_agent(name: str):
         f.write(AGENT_SDK_PY.strip())
 
     generate_docker_compose()
-
-    print(f"\n{G}[V] Профиль успешно создан!{W}")
-    print(f"{Y}[!] ШАГ 1: Откройте файл Agents/{name}/.env и впишите туда свои API ключи.{W}")
-    print(f"{Y}[!] ШАГ 2: Авторизуйте Telegram командой: {C}python aaf.py auth {name}{W}")
-    print(f"{Y}[!] ШАГ 3: Запустите агента командой: {C}python aaf.py start {name}{W}")
+    print_agent_setup_guide(name=name)
 
 def cmd_auth(agent_name: str):
     agent_name = agent_name.upper()
