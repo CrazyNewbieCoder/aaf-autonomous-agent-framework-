@@ -60,26 +60,28 @@ class EventsMonitoring:
         await event_bus.publish(Events.SYSTEM_MODULE_HEARTBEAT, module_name=events_monitoring_module, status="ON")
 
     async def get_background_events(self) -> str:
-        """Возвращает список отформатированных строк событий с обрезкой длинных текстов"""
+        """Возвращает список отформатированных строк событий и ОЧИЩАЕТ очередь"""
         lines = []
         for event in self.background_events:
-            # Безопасно копируем kwargs, чтобы не изменить оригинал
             safe_kwargs = dict(event['kwargs'])
             
-            # Если в событии есть длинный текст (например, пост из канала), обрезаем его
             if 'text' in safe_kwargs and isinstance(safe_kwargs['text'], str):
                 if len(safe_kwargs['text']) > 150:
                     safe_kwargs['text'] = safe_kwargs['text'][:150] + "... [Обрезано]"
             
-            # Если есть результат от субагента, даем ему большой лимит (3000 символов), чтобы главный агент мог прочитать отчет, а не выдумывать его
             if 'result' in safe_kwargs and isinstance(safe_kwargs['result'], str):
                 if len(safe_kwargs['result']) > 5000:
-                    safe_kwargs['result'] = safe_kwargs['result'][:5000] + "\n... [Остаток отчета воркера обрезан для экономии токенов]"
+                    safe_kwargs['result'] = safe_kwargs['result'][:5000] + "\n... [Обрезано]"
 
             kwargs_str = str(safe_kwargs)
             lines.append(f"[{event['event'].name}] args: {event['args']}, kwargs: {kwargs_str}")
         
-        return "\n".join(lines) if lines else "Нет фоновых событий."
+        result = "\n".join(lines) if lines else "Нет фоновых событий."
+        
+        # Важно: Очищаем очередь, чтобы агент не реагировал на одно и то же дважды
+        self.background_events.clear()
+        
+        return result
 
 
 
