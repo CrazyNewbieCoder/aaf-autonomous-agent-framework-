@@ -1,23 +1,27 @@
 from pathlib import Path
 from src.layer00_utils.logger import system_logger
 
+# Единый менеджер
+from src.layer00_utils.env_manager import AGENT_NAME
+
 class PromptManager:
     """Хранилище и сборка общих промптов из .md файлов"""
     def __init__(self):
         # Определяем абсолютный путь к папке prompt/ (здесь лежат системные инструкции)
         self.system_dir = Path(__file__).resolve().parent
         
-        # Поднимаемся на 4 уровня вверх до корня проекта и идем в config/personality
+        # Поднимаемся на 4 уровня вверх до корня проекта
         self.project_root = self.system_dir.parents[3]
-        self.personality_dir = self.project_root / "config" / "personality"
-        self.workspace_dir = self.project_root / "workspace"
+        
+        # ДИНАМИЧЕСКИЙ ПУТЬ К ЛИЧНОСТИ (Agents/{AGENT_NAME}/config/personality)
+        self.personality_dir = self.project_root / "Agents" / AGENT_NAME / "config" / "personality"
 
-        # Загружаем личность (из пользовательского конфига)
+        # Загружаем личность (из конфига конкретного агента)
         self.SOUL = self._load_file(self.personality_dir / "SOUL.md")
         self.COMMUNICATION_STYLE = self._load_file(self.personality_dir / "COMMUNICATION_STYLE.md")
         self.EXAMPLES_OF_STYLE = self._load_file(self.personality_dir / "EXAMPLES_OF_STYLE.md")
 
-        # Загружаем системные инструкции (из исходного кода)
+        # Загружаем системные инструкции (из исходного кода src/ - общие для всех)
         self.SYSTEM_INSTRUCTIONS = self._load_file(self.system_dir / "system" / "SYSTEM_INSTRUCTIONS.md")
         self.PROACTIVITY_INSTRUCTIONS = self._load_file(self.system_dir / "system" / "PROACTIVITY_INSTRUCTIONS.md")
         self.THOUGHTS_INSTRUCTIONS = self._load_file(self.system_dir / "system" / "THOUGHTS_INSTRUCTIONS.md")

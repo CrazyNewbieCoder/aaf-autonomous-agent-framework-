@@ -1,15 +1,15 @@
+# Файл: src/layer00_utils/sandbox_env/manager.py
+
 import subprocess
 from src.layer00_utils.logger import system_logger
 from src.layer00_utils.workspace import workspace_manager
+from src.layer00_utils.env_manager import AGENT_NAME
 
 def _get_running_python_scripts() -> dict:
-    """
-    Сканирует Docker и находит все запущенные контейнеры с префиксом agent_daemon_
-    Возвращает словарь {имя_файла: ID_контейнера}
-    """
     running = {}
+    # Ищем демонов ТОЛЬКО текущего агента
+    prefix = f"agent_daemon_{AGENT_NAME.lower()}_"
     try:
-        # Запрашиваем список контейнеров (формат: Имя|ID)
         result = subprocess.run(
             ["docker", "ps", "--format", "{{.Names}}|{{.ID}}"],
             capture_output=True, text=True, check=True
@@ -20,15 +20,12 @@ def _get_running_python_scripts() -> dict:
             return running
             
         for line in output.split('\n'):
-            if line.startswith("agent_daemon_"):
+            if line.startswith(prefix):
                 parts = line.split('|')
                 if len(parts) == 2:
                     container_name = parts[0]
                     container_id = parts[1]
-                    
-                    # Извлекаем оригинальное имя файла (убираем префикс)
-                    # agent_daemon_monitor.py -> monitor.py
-                    filename = container_name.replace("agent_daemon_", "", 1)
+                    filename = container_name.replace(prefix, "", 1)
                     running[filename] = container_id
                     
     except Exception as e:
@@ -37,32 +34,32 @@ def _get_running_python_scripts() -> dict:
     return running
 
 def _start_background_python_script(filename: str) -> str:
-    """Запускает скрипт как независимого фонового демона в Docker DinD"""
     filepath = workspace_manager.get_sandbox_file(filename)
     
     if not filepath.exists():
         return f"[Error] Файл '{filename}' не найден."
 
-    # 1. Проверяем, не запущен ли он уже
     running = _get_running_python_scripts()
     if filename in running:
         return f"[Info] Скрипт '{filename}' уже работает в фоне (Container ID: {running[filename]})."
 
-    # 2. Формируем уникальное имя для контейнера
+    # Префикс уникальный для каждого агента
     safe_filename = "".join(c if c.isalnum() or c in ".-_" else "_" for c in filename)
-    container_name = f"agent_daemon_{safe_filename}"
+    container_name = f"agent_daemon_{AGENT_NAME.lower()}_{safe_filename}"
     
-    # 3. Запускаем отвязанный процесс в Docker DinD
+    sandbox_path = f"/app/Agents/{AGENT_NAME}/workspace/sandbox"
+
     docker_cmd = [
         "docker", "run", "-d",                          
         "--name", container_name,                       
         "--memory=512m",                                
         "--cpus=1.0",                                   
         "--pids-limit=50",
-        "--network=host", # Чтобы демон мог отправлять алерты в agent_core
-        # Пробрасываем папку из sandbox_engine внутрь фонового демона
-        "-v", "/app/workspace/sandbox:/app/workspace/sandbox",
-        "-w", "/app/workspace/sandbox",                 
+        "--network=host", 
+        # Передаем имя агента внутрь демона
+        "-e", f"MASTER_AGENT=agent_{AGENT_NAME.lower()}",
+        "-v", f"{sandbox_path}:{sandbox_path}",
+        "-w", sandbox_path,                 
         "python:3.11-slim",                             
         "python", filename                              
     ]
@@ -88,18 +85,15 @@ def _start_background_python_script(filename: str) -> str:
         return f"[Error] Внутренняя ошибка: {e}"
 
 def _kill_background_python_script(filename: str) -> str:
-    """Находит и принудительно удаляет фоновый Docker-контейнер"""
     running = _get_running_python_scripts()
     
     if filename not in running:
-        return f"[Info] Скрипт '{filename}' не найден среди запущенных контейнеров."
+        return f"[Info] Скрипт '{filename}' не найден среди запущенных контейнеров агента '{AGENT_NAME}'."
         
-    # Имя контейнера, которое мы ему давали при запуске
     safe_filename = "".join(c if c.isalnum() or c in ".-_" else "_" for c in filename)
-    container_name = f"agent_daemon_{safe_filename}"
+    container_name = f"agent_daemon_{AGENT_NAME.lower()}_{safe_filename}"
     
     try:
-        # docker rm -f принудительно останавливает (SIGKILL) и удаляет контейнер
         subprocess.run(
             ["docker", "rm", "-f", container_name],
             capture_output=True, text=True, check=True
@@ -114,26 +108,20 @@ def _kill_background_python_script(filename: str) -> str:
         return f"[Error] Системная ошибка при удалении: {e}"
     
 def cleanup_zombie_containers() -> None:
-    """
-    Вызывается при старте системы.
-    Находит все зависшие/осиротевшие фоновые Docker-контейнеры от прошлых запусков агента и жестко убивает их.
-    """
     running = _get_running_python_scripts()
     
     if not running:
-        system_logger.info("[Sandbox] Зомби-контейнеры не обнаружены. Песочница чиста.")
+        system_logger.info(f"[Sandbox] Зомби-контейнеры для агента '{AGENT_NAME}' не обнаружены.")
         return
         
-    system_logger.warning(f"[Sandbox] Обнаружено {len(running)} осиротевших контейнеров. Начинаю зачистку...")
+    system_logger.warning(f"[Sandbox] Обнаружено {len(running)} осиротевших контейнеров агента '{AGENT_NAME}'. Начинаю зачистку...")
     
     killed_count = 0
     for filename, container_id in running.items():
         try:
-            # Восстанавливаем оригинальное имя контейнера
             safe_filename = "".join(c if c.isalnum() or c in ".-_" else "_" for c in filename)
-            container_name = f"agent_daemon_{safe_filename}"
+            container_name = f"agent_daemon_{AGENT_NAME.lower()}_{safe_filename}"
             
-            # Принудительно убиваем
             subprocess.run(
                 ["docker", "rm", "-f", container_name],
                 capture_output=True, check=True
@@ -143,4 +131,4 @@ def cleanup_zombie_containers() -> None:
         except Exception as e:
             system_logger.error(f"[Sandbox] Не удалось убить зомби-контейнер '{filename}': {e}")
             
-    system_logger.info(f"[Sandbox] Зачистка завершена. Уничтожено {killed_count} зомби-контейнеров.")
+    system_logger.info(f"[Sandbox] Зачистка завершена. Уничтожено {killed_count} зомби-контейнеров агента '{AGENT_NAME}'.")

@@ -1,12 +1,13 @@
+# Файл: src/layer00_utils/sandbox_env/executor.py
+
 import asyncio
 from src.layer00_utils.logger import system_logger
 from src.layer00_utils.workspace import workspace_manager
+from src.layer00_utils.env_manager import AGENT_NAME # Единый менеджер
 
-# Максимальная длина вывода, которую мы вернем агенту
 MAX_OUTPUT_LENGTH = 80000 
 
 def _truncate_output(text: str) -> str:
-    """Обрезает слишком длинный текст, оставляя начало и конец"""
     if not text:
         return ""
     if len(text) > MAX_OUTPUT_LENGTH:
@@ -15,17 +16,17 @@ def _truncate_output(text: str) -> str:
     return text
 
 async def execute_once(filename: str, timeout: int = 120) -> str:
-    """
-    Разовый запуск скрипта в изолированном Docker-контейнере с таймаутом.
-    Возвращает STDOUT и STDERR.
-    """
     try:
         filepath = workspace_manager.get_sandbox_file(filename)
         
         if not filepath.exists():
             return f"[Error] Файл '{filename}' не найден в директории sandbox."
 
-        system_logger.info(f"[Sandbox] Запуск '{filename}' в Docker DinD (Таймаут: {timeout}с).")
+        system_logger.info(f"[Sandbox] Запуск '{filename}' в Docker DinD (Агент: {AGENT_NAME}, Таймаут: {timeout}с).")
+
+        # Динамический путь для Docker Wolumes для каждого отдельного агента
+        # /app/Agents/{AGENT_NAME}/workspace/sandbox
+        sandbox_path = f"/app/Agents/{AGENT_NAME}/workspace/sandbox"
 
         docker_cmd = [
             "docker", "run",
@@ -33,24 +34,22 @@ async def execute_once(filename: str, timeout: int = 120) -> str:
             "--memory=1g",                                  
             "--cpus=1",                                     
             "--pids-limit=100", 
-            # Сеть host здесь означает сеть самого sandbox_engine, 
-            # что позволяет скрипту достучаться до agent_core по его имени в compose
             "--network=host",
-            # Пробрасываем папку из sandbox_engine внутрь эфемерного воркера
-            "-v", "/app/workspace/sandbox:/app/workspace/sandbox",         
-            "-w", "/app/workspace/sandbox",
+            # Передаем имя агента внутрь эфемерного контейнера для agent_sdk.py
+            "-e", f"MASTER_AGENT=agent_{AGENT_NAME.lower()}",
+            # Пробрасываем ТОЛЬКО папку текущего агента
+            "-v", f"{sandbox_path}:{sandbox_path}",         
+            "-w", sandbox_path,
             "python:3.11-slim",                             
             "python", filename                              
         ]
 
-        # Запускаем процесс Docker асинхронно
         process = await asyncio.create_subprocess_exec(
             *docker_cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
 
-        # Ждем выполнения с таймаутом
         try:
             stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
         except asyncio.TimeoutError:
@@ -61,19 +60,17 @@ async def execute_once(filename: str, timeout: int = 120) -> str:
             system_logger.warning(f"[Sandbox] Скрипт '{filename}' превысил таймаут {timeout}с и был убит.")
             return f"[Timeout Error] Скрипт выполнялся дольше {timeout} секунд."
 
-        # Декодируем и обрезаем вывод
         out_str = stdout.decode('utf-8', errors='replace').strip()
         err_str = stderr.decode('utf-8', errors='replace').strip()
 
         out_str = _truncate_output(out_str)
         err_str = _truncate_output(err_str)
 
-        # Формируем ответ для LLM
         result = f"--- STDOUT ---\n{out_str if out_str else 'Пусто'}"
         if err_str:
             result += f"\n\n--- STDERR ---\n{err_str}"
 
-        system_logger.debug(f"[Sandbox] Выполнение '{filename}' в Docker завершено (Код выхода: {process.returncode}).")
+        system_logger.debug(f"[Sandbox] Выполнение '{filename}' завершено (Код выхода: {process.returncode}).")
         return result
 
     except Exception as e:

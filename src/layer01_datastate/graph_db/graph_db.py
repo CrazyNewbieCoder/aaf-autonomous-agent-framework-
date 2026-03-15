@@ -1,17 +1,21 @@
 import kuzu
 import asyncio
 from pathlib import Path
+from src.layer00_utils.env_manager import AGENT_NAME
 from src.layer00_utils.logger import system_logger
 from src.layer00_utils.config_manager import config
 from src.layer00_utils.watchdog.watchdog import graph_db_module
 from src.layer01_datastate.event_bus.event_bus import event_bus
 from src.layer01_datastate.event_bus.events import Events
 
-# Получаем абсолютный корень проекта (как в vector_db.py)
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
-GRAPH_DB_PATH = str(PROJECT_ROOT / config.memory.kuzu_db_path)
+current_dir = Path(__file__).resolve()
+src_dir = next((p for p in current_dir.parents if p.name == "src"), None)
+project_root = src_dir.parent if src_dir else current_dir.parents[3]
 
-# Глобальные переменные для базы и соединения
+# Динамический путь для каждого отдельного агента
+# KuzuDB будет лежать в Agents/{AGENT_NAME}/workspace/_data/kuzu_db/
+GRAPH_DB_PATH = str(project_root / "Agents" / AGENT_NAME / config.memory.kuzu_db_path)
+
 db = None
 conn = None
 
@@ -19,33 +23,26 @@ def _init_kuzu_sync():
     """Синхронная инициализация KuzuDB и создание схемы (если её нет)"""
     global db, conn
     
-    # Пытаемся создать папку, если её нет
     Path(GRAPH_DB_PATH).parent.mkdir(parents=True, exist_ok=True)
     
     db = kuzu.Database(GRAPH_DB_PATH)
     conn = kuzu.Connection(db)
     
-    # Проверяем наличие таблиц. Если их нет — создаем.
-    # В KuzuDB нет "CREATE TABLE IF NOT EXISTS", поэтому ловим ошибку
     try:
         conn.execute("MATCH (n:Concept) RETURN n LIMIT 1")
     except RuntimeError:
-        system_logger.info("[Graph DB] Создание схемы графа (Nodes: Concept, Edges: Link)...")
+        system_logger.info(f"[Graph DB] Создание схемы графа для '{AGENT_NAME}' (Nodes: Concept, Edges: Link)...")
 
-        # Таблица узлов. Primary Key - имя узла (для удобного поиска)
         conn.execute("CREATE NODE TABLE Concept(name STRING, type STRING, PRIMARY KEY (name))")
-        
-        # Таблица связей
         conn.execute("CREATE REL TABLE Link(FROM Concept TO Concept, base_type STRING, context STRING, updated_at STRING)")
 
 async def setup_graph_db():
     """Асинхронная обертка для старта базы"""
     try:
         await asyncio.to_thread(_init_kuzu_sync)
-        system_logger.info("[Graph DB] База данных успешно подключена.")
+        system_logger.info(f"[Graph DB] Графовая база данных успешно подключена (Директория: {GRAPH_DB_PATH}).")
         await event_bus.publish(Events.SYSTEM_MODULE_HEARTBEAT, module_name=graph_db_module, status="ON")
         
-        # Подписываемся на остановку системы
         event_bus.subscribe(Events.STOP_SYSTEM, stop_graph_db)
     except Exception as e:
         system_logger.error(f"[Graph DB] Ошибка инициализации KuzuDB: {e}")
@@ -58,4 +55,4 @@ async def stop_graph_db(*args, **kwargs):
         conn.close()
     if db:
         db.close()
-    system_logger.info("[Graph DB] База данных сохранена и остановлена.")
+    system_logger.info(f"[Graph DB] База данных агента '{AGENT_NAME}' сохранена и остановлена.")

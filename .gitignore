@@ -8,6 +8,10 @@ env/
 .DS_Store
 Thumbs.db
 
+# Мульти-агентная структура (v1.1.0)
+Agents/
+docker-compose.yml
+
 # Конфиги/настройки/ключи
 .env
 config/settings.yaml

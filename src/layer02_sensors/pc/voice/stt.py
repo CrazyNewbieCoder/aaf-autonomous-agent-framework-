@@ -3,7 +3,7 @@ import os
 import vosk
 import asyncio
 import wave
-from dotenv import load_dotenv
+from src.layer00_utils.env_manager import load_agent_env
 from src.layer00_utils.config_manager import config
 from src.layer00_utils.logger import system_logger
 from src.layer01_datastate.event_bus.event_bus import event_bus
@@ -16,7 +16,7 @@ try:
 except (ImportError, OSError):
     sounddevice = None
 
-load_dotenv()
+load_agent_env()
 
 VOSK_MODEL_PATH = config.hardware.voice.stt_model_path
 VOICE_QUERY = Events.VOICE_QUERY

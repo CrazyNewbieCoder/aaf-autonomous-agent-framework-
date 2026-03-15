@@ -1,6 +1,6 @@
 import edge_tts
 import asyncio
-from dotenv import load_dotenv
+from src.layer00_utils.env_manager import load_agent_env
 import os
 from datetime import datetime
 from src.layer00_utils.config_manager import config
@@ -13,7 +13,7 @@ try:
 except ImportError:
     PYGAME_AVAILABLE = False
 
-load_dotenv()
+load_agent_env()
 
 TTS_VOICE = config.hardware.voice.tts_voice # edge-tts --list-voices
 PHRASES_DIR = os.path.join("src", "layer00_utils", "phrases")

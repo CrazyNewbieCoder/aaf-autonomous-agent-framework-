@@ -4,20 +4,25 @@ import chromadb.utils.embedding_functions as embedding_functions
 import os
 import warnings
 
+# 1. Единый менеджер и конфиги
+from src.layer00_utils.env_manager import AGENT_NAME
 from src.layer00_utils.config_manager import config
 from src.layer00_utils.logger import system_logger
 from src.layer00_utils.watchdog.watchdog import vector_db_module
 from src.layer01_datastate.event_bus.event_bus import event_bus
 from src.layer01_datastate.event_bus.events import Events
 
-# Подавляем раздражающий варнинг ChromaDB о несовпадении старых Windows-путей внутри Docker
 warnings.filterwarnings("ignore", category=UserWarning, message=".*Could not reconstruct embedding function.*")
 
-# Получаем абсолютный корень проекта (чтобы работало и в Windows, и внутри Docker)
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+current_dir = Path(__file__).resolve()
+src_dir = next((p for p in current_dir.parents if p.name == "src"), None)
+project_root = src_dir.parent if src_dir else current_dir.parents[3]
 
-CHROMA_DB_DIRECTORY = str(PROJECT_ROOT / config.memory.chroma_db_path)
-LOCAL_EMBEDDING_MODEL_PATH = str(PROJECT_ROOT / config.memory.embedding_model.local_path)
+# Динамические пути для каждого отдельного агента
+# ChromaDB будет лежать в Agents/{AGENT_NAME}/workspace/_data/chroma_db/
+CHROMA_DB_DIRECTORY = str(project_root / "Agents" / AGENT_NAME / config.memory.chroma_db_path)
+# Путь к локальной модели BAAI остается ОБЩИМ для всех агентов, чтобы не качать гигабайты дублей
+LOCAL_EMBEDDING_MODEL_PATH = str(project_root / config.memory.embedding_model.local_path)
 
 embedding_model = embedding_functions.SentenceTransformerEmbeddingFunction(
     model_name=LOCAL_EMBEDDING_MODEL_PATH,
@@ -47,9 +52,9 @@ def _get_col(collection_name: str):
     return COLLECTIONS[collection_name]
 
 async def stop_vector_db(*args, **kwargs):
-    system_logger.info("[Vector DB] База данных сохранена и остановлена.")
+    system_logger.info(f"[Vector DB] База данных агента '{AGENT_NAME}' сохранена и остановлена.")
 
 async def setup_vector_db():
-    system_logger.info("[Vector DB] База данных инициализирована.")
+    system_logger.info(f"[Vector DB] База данных инициализирована (Директория: {CHROMA_DB_DIRECTORY}).")
     event_bus.subscribe(Events.STOP_SYSTEM, stop_vector_db)
     await event_bus.publish(Events.SYSTEM_MODULE_HEARTBEAT, module_name=vector_db_module, status="ON")
