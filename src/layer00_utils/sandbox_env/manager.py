@@ -37,7 +37,7 @@ def _get_running_python_scripts() -> dict:
     return running
 
 def _start_background_python_script(filename: str) -> str:
-    """Запускает скрипт как независимого фонового демона в Docker"""
+    """Запускает скрипт как независимого фонового демона в Docker DinD"""
     filepath = workspace_manager.get_sandbox_file(filename)
     
     if not filepath.exists():
@@ -49,42 +49,36 @@ def _start_background_python_script(filename: str) -> str:
         return f"[Info] Скрипт '{filename}' уже работает в фоне (Container ID: {running[filename]})."
 
     # 2. Формируем уникальное имя для контейнера
-    # Docker требует, чтобы имена контейнеров состояли только из [a-zA-Z0-9_.-]
     safe_filename = "".join(c if c.isalnum() or c in ".-_" else "_" for c in filename)
     container_name = f"agent_daemon_{safe_filename}"
     
-    # 3. Запускаем отвязанный процесс в Docker (флаг -d)
-    import socket
-    current_container_id = socket.gethostname()
-    
+    # 3. Запускаем отвязанный процесс в Docker DinD
     docker_cmd = [
         "docker", "run", "-d",                          
         "--name", container_name,                       
         "--memory=512m",                                
         "--cpus=1.0",                                   
-        "--pids-limit=50",                              
-        "--add-host=host.docker.internal:host-gateway", 
-        "--volumes-from", current_container_id,         # Берем вольюмы из текущего контейнера
-        "-w", "/app/workspace/sandbox",                 # Рабочая директория
+        "--pids-limit=50",
+        "--network=host", # Чтобы демон мог отправлять алерты в agent_core
+        # Пробрасываем папку из sandbox_engine внутрь фонового демона
+        "-v", "/app/workspace/sandbox:/app/workspace/sandbox",
+        "-w", "/app/workspace/sandbox",                 
         "python:3.11-slim",                             
         "python", filename                              
     ]
 
     try:
-        # Запускаем синхронно, так как docker run -d отрабатывает мгновенно
         result = subprocess.run(docker_cmd, capture_output=True, text=True, check=True)
-        container_id = result.stdout.strip()[:12] # Берем короткий ID
+        container_id = result.stdout.strip()[:12]
         
-        system_logger.info(f"[Sandbox] Запущен фоновый демон: '{filename}' (ID: {container_id})")
+        system_logger.info(f"[Sandbox] Запущен фоновый демон DinD: '{filename}' (ID: {container_id})")
         return f"Скрипт '{filename}' успешно запущен в фоновом режиме (Docker Container: {container_name})."
         
     except subprocess.CalledProcessError as e:
         error_msg = e.stderr.strip() if e.stderr else str(e)
         system_logger.error(f"[Sandbox] Ошибка запуска демона '{filename}': {error_msg}")
         
-        # Если контейнер с таким именем уже существует (например, упал, но не удалился)
         if "Conflict" in error_msg or "already in use" in error_msg:
-            # Пытаемся принудительно удалить мертвый контейнер и запустить заново
             subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
             return "[Warning] Обнаружен зависший контейнер. Он был удален. Попробуйте запустить скрипт еще раз."
             

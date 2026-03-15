@@ -100,12 +100,16 @@ Simply change the text in these files, save them, and the next time the agent wa
 
 You can also configure the model, timeouts, and token limits in the `config/settings.yaml` file.
 
-### ⚠️ Important Security Warning (Docker-in-Docker)
+### 🛡️ Isolation & Security (True Docker-in-Docker)
 
-The AAF architecture uses Docker socket forwarding (`/var/run/docker.sock`) inside the `agent_core` container. This is necessary so that the agent can dynamically create isolated sandboxes (worker containers) to execute Python scripts.
+Unlike many frameworks that execute LLM-generated code directly on the host, AAF features **Enterprise-grade security** utilizing a True DinD (Docker-in-Docker) architecture.
 
-What this means: The agent has administrator (root) rights over the Docker daemon of your host machine. Do not run the project on production servers with critical data without additional isolation. The project is intended for local launch (on a personal PC) or on a dedicated VPS.
+The `docker-compose` stack spins up a dedicated, fully isolated `sandbox_engine` service. The main agent's brain (`agent_core`) **does not** have access to your host machine's Docker socket. Whenever the agent writes and executes Python scripts, they are routed through an internal network to the `sandbox_engine`, which spawns a disposable, ephemeral micro-container for each script.
 
+**Why this matters:**
+1. **Host Safety:** Even if the LLM hallucinates destructive code (e.g., `rm -rf /`) or encounters a malicious payload during OSINT, the damage is strictly confined to a disposable container inside the sandbox. Your actual computer/server remains 100% safe.
+2. **Clean Environment:** Executed scripts leave no orphan processes or system garbage behind.
+3. **Safe Delegation:** You can confidently task the agent with scraping unknown websites or analyzing suspicious data files.
 
 ## 🛠 Tech Stack
 

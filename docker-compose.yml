@@ -1,5 +1,5 @@
 services:
-  postgres_db:
+  postgres_db: # Поднимаем SQL
     image: postgres:15-alpine
     restart: always
     environment:
@@ -15,16 +15,31 @@ services:
     build: .
     depends_on:
       - postgres_db
+      - sandbox_engine # Явно указываем, что мозг ждет запуска песочницы
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      # Заставляем Docker CLI внутри агента отправлять команды 
+      # не в локальный сокет хоста, а по сети (TCP) в контейнер sandbox_engine
+      DOCKER_HOST: tcp://sandbox_engine:2375
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock 
       - ./workspace:/app/workspace
       - ./src/logs:/app/src/logs
       - ./src:/app/src
       - ./src/layer00_utils/local_models:/app/src/layer00_utils/local_models
       - ./config:/app/config
+
+  sandbox_engine:
+    image: docker:24-dind # Официальный образ Docker-in-Docker
+    restart: unless-stopped
+    privileged: true # Разрешаем этому контейнеру запускать внутри себя другие контейнеры
+    environment:
+      DOCKER_TLS_CERTDIR: "" # Отключаем TLS, так как общаемся внутри закрытой сети docker-compose
+    command: "--host=tcp://0.0.0.0:2375" # Открываем порт 2375 для приема команд от agent_core
+    volumes:
+      # Пробрасываем ту же самую папку workspace, чтобы скрипты находили файлы
+      - ./workspace:/app/workspace
 
 volumes:
   agent_pg_data:

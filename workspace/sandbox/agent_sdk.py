@@ -7,8 +7,8 @@ STATE_FILE = "sandbox_state.json"
 # Проверяем, находимся ли мы внутри Docker-контейнера
 IN_DOCKER = os.path.exists('/.dockerenv')
 
-# host.docker.internal позволяет достучаться из контейнера до локалхоста (Windows)
-HOST = "host.docker.internal" if IN_DOCKER else "127.0.0.1"
+# В новой архитектуре DinD, чтобы достучаться до мозга, мы обращаемся к DNS имени контейнера agent_core
+HOST = "agent_core" if IN_DOCKER else "127.0.0.1"
 LISTENER_URL = f"http://{HOST}:18790/alert"
 
 def send_alert(message: str):

@@ -25,21 +25,20 @@ async def execute_once(filename: str, timeout: int = 120) -> str:
         if not filepath.exists():
             return f"[Error] Файл '{filename}' не найден в директории sandbox."
 
-        system_logger.info(f"[Sandbox] Запуск '{filename}' в Docker (Таймаут: {timeout}с).")
-        
-        import socket
-        current_container_id = socket.gethostname()
+        system_logger.info(f"[Sandbox] Запуск '{filename}' в Docker DinD (Таймаут: {timeout}с).")
 
         docker_cmd = [
             "docker", "run",
             "--rm",                                         
             "--memory=1g",                                  
             "--cpus=1",                                     
-            "--pids-limit=100",                             
-            "--add-host=host.docker.internal:host-gateway", 
-            # Docker-in-Docker: берем ВСЕ вольюмы из текущего контейнера (включая sandbox)
-            "--volumes-from", current_container_id,         
-            "-w", "/app/workspace/sandbox", # Рабочая директория теперь полная
+            "--pids-limit=100", 
+            # Сеть host здесь означает сеть самого sandbox_engine, 
+            # что позволяет скрипту достучаться до agent_core по его имени в compose
+            "--network=host",
+            # Пробрасываем папку из sandbox_engine внутрь эфемерного воркера
+            "-v", "/app/workspace/sandbox:/app/workspace/sandbox",         
+            "-w", "/app/workspace/sandbox",
             "python:3.11-slim",                             
             "python", filename                              
         ]
@@ -55,13 +54,12 @@ async def execute_once(filename: str, timeout: int = 120) -> str:
         try:
             stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
         except asyncio.TimeoutError:
-            # Если зависло, жестко убиваем процесс docker
             try:
                 process.kill()
             except OSError:
                 pass
             system_logger.warning(f"[Sandbox] Скрипт '{filename}' превысил таймаут {timeout}с и был убит.")
-            return f"[Timeout Error] Скрипт выполнялся дольше {timeout} секунд (возможно, долго скачивались библиотеки или возник бесконечный цикл) и был принудительно завершен."
+            return f"[Timeout Error] Скрипт выполнялся дольше {timeout} секунд."
 
         # Декодируем и обрезаем вывод
         out_str = stdout.decode('utf-8', errors='replace').strip()
@@ -73,7 +71,6 @@ async def execute_once(filename: str, timeout: int = 120) -> str:
         # Формируем ответ для LLM
         result = f"--- STDOUT ---\n{out_str if out_str else 'Пусто'}"
         if err_str:
-            # Docker часто пишет служебную инфу (например от pip) в STDERR, это нормально
             result += f"\n\n--- STDERR ---\n{err_str}"
 
         system_logger.debug(f"[Sandbox] Выполнение '{filename}' в Docker завершено (Код выхода: {process.returncode}).")
