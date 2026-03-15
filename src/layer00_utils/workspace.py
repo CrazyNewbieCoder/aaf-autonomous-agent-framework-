@@ -2,10 +2,10 @@ import time
 from pathlib import Path
 from datetime import datetime
 from src.layer00_utils.logger import system_logger
+from src.layer00_utils.env_manager import AGENT_NAME # Импортируем имя текущего агента
 
 class WorkspaceManager:
     def __init__(self):
-        # Ищем корень проекта отталкиваясь от текущего файла
         current_dir = Path(__file__).resolve()
         src_dir = next((p for p in current_dir.parents if p.name == "src"), None)
         
@@ -14,7 +14,8 @@ class WorkspaceManager:
         else:
             self.project_root = current_dir.parent.parent.parent
 
-        self.workspace_dir = self.project_root / "workspace"
+        # Динамический путь до изолированного рабочего пространства отдельного агента
+        self.workspace_dir = self.project_root / "Agents" / AGENT_NAME / "workspace"
         self.temp_dir = self.workspace_dir / "temp"
         self.sandbox_dir = self.workspace_dir / "sandbox"
 
@@ -22,7 +23,7 @@ class WorkspaceManager:
         """Создает необходимые папки при старте системы"""
         self.temp_dir.mkdir(parents=True, exist_ok=True)
         self.sandbox_dir.mkdir(parents=True, exist_ok=True)
-        system_logger.info(f"[Workspace] Инициализирован. Путь: {self.workspace_dir}")
+        system_logger.info(f"[Workspace] Инициализирован для агента '{AGENT_NAME}'. Путь: {self.workspace_dir}")
 
     def get_temp_file(self, prefix: str = "", extension: str = "") -> Path:
         """Генерирует безопасный абсолютный путь для нового временного файла"""

@@ -1,5 +1,8 @@
+# Файл: src/layer00_utils/logger.py
 import logging
 import os
+# Импортируем ДО загрузки конфига, чтобы избежать циклических импортов
+from src.layer00_utils.env_manager import AGENT_NAME 
 from src.layer00_utils.config_manager import config
 
 LOGGING_LEVEL_STR = config.system.logging_level.upper()
@@ -89,27 +92,24 @@ class ColorFormatter(logging.Formatter):
         return log_message
 
 def setup_specific_logger(name, log_file, level=LOGGING_LEVEL):
-    log_dir = "src/logs"
+    # Динамический путь для логов каждого отдельного агента
+    log_dir = os.path.join("Agents", AGENT_NAME, "logs")
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
 
     full_path = os.path.join(log_dir, log_file)
     
-    # Базовый формат (без цветов, для файла)
     file_format = "%(asctime)s.%(msecs)03d - %(name)s - %(levelname)s - %(message)s"
     date_format = "%Y-%m-%d %H:%M:%S"
     
-    # 1. Хендлер для ФАЙЛА (Пишет чистый текст без крякозябр ANSI)
     file_handler = logging.FileHandler(full_path, encoding="utf-8", mode="a")
     file_formatter = logging.Formatter(fmt=file_format, datefmt=date_format)
     file_handler.setFormatter(file_formatter)
 
-    # 2. Хендлер для КОНСОЛИ (Пишет цветной текст)
     console_handler = logging.StreamHandler()
     color_formatter = ColorFormatter(fmt=file_format, datefmt=date_format)
     console_handler.setFormatter(color_formatter)
 
-    # Создаем логгер
     specific_logger = logging.getLogger(name)
     specific_logger.setLevel(level)
     

@@ -9,6 +9,7 @@ from src.layer01_datastate.sql_db.management.dialogue import create_dialogue_ent
 from src.layer03_brain.agent.skills.registry import skills_registry
 from src.layer03_brain.llm.client import client_openai, key_manager
 from src.layer03_brain.agent.engine.state import brain_state
+from src.layer00_utils.env_manager import AGENT_NAME
 
 LLM_MODEL = config.llm.model_name
 MAX_REACT_STEPS = config.llm.max_react_steps
@@ -16,12 +17,22 @@ MAX_REACT_STEPS = config.llm.max_react_steps
 def _dump_context_to_file(messages: list):
     """Служебная функция для отладки: сохраняет финальный промпт в Markdown-файл"""
     if not config.system.flags.dump_llm_context:
-        return # Если флаг False, просто выходим
+        return 
     try:
         import datetime
-        os.makedirs("logs", exist_ok=True)
+        from pathlib import Path
         
-        with open("src/logs/latest_llm_context.md", "w", encoding="utf-8") as f:
+        current_dir = Path(__file__).resolve()
+        src_dir = next((p for p in current_dir.parents if p.name == "src"), None)
+        project_root = src_dir.parent if src_dir else current_dir.parents[4]
+        
+        # Динамический путь: Agents/{AGENT_NAME}/logs/
+        log_dir = project_root / "Agents" / AGENT_NAME / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        
+        file_path = log_dir / "latest_llm_context.md"
+        
+        with open(file_path, "w", encoding="utf-8") as f:
             f.write(f"# ОТЛАДКА КОНТЕКСТА {config.identity.agent_name} (Обновлено: {datetime.datetime.now().strftime('%H:%M:%S')})\n\n")
             
             for msg in messages:

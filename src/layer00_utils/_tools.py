@@ -1,6 +1,6 @@
 import requests
 import os
-from dotenv import load_dotenv
+
 from datetime import datetime
 from PIL import Image
 from src.layer00_utils.logger import system_logger
@@ -8,6 +8,9 @@ from src.layer00_utils.workspace import workspace_manager
 from collections import deque
 import tiktoken
 from src.layer00_utils.config_manager import config
+from src.layer00_utils.env_manager import load_agent_env
+
+load_agent_env()
 
 try:
     import mss
@@ -16,7 +19,6 @@ try:
 except ImportError:
     MSS_AVAILABLE = False
 
-load_dotenv() 
 
 CITY_NAME = config.hardware.weather_city
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")

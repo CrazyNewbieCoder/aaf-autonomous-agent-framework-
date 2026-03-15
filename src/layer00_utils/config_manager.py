@@ -2,6 +2,7 @@ import yaml
 from pathlib import Path
 from pydantic import BaseModel
 from typing import List, Tuple
+from src.layer00_utils.env_manager import AGENT_NAME
 
 class IdentityConfig(BaseModel):
     agent_name: str
@@ -97,16 +98,17 @@ class AppConfig(BaseModel):
     system: SystemConfig
 
 def load_config() -> AppConfig:
-    # current_dir сейчас указывает на src/layer00_utils
-    current_dir = Path(__file__).resolve().parent
+    current_dir = Path(__file__).resolve()
+    src_dir = next((p for p in current_dir.parents if p.name == "src"), None)
+    project_root = src_dir.parent if src_dir else current_dir.parents[2]
     
-    # Поднимаемся на 2 уровня вверх (до корня AAF) и заходим в config
-    yaml_path = current_dir.parent.parent / "config" / "settings.yaml"
+    # Динамический путь до конфига для каждого отдельного агента
+    yaml_path = project_root / "Agents" / AGENT_NAME / "config" / "settings.yaml"
 
     if not yaml_path.exists():
         raise FileNotFoundError(
             f"\nФайл конфигурации не найден по пути: {yaml_path}\n"
-            "Пожалуйста, запустите скрипт aaf_setup.py для настройки проекта."
+            f"Убедитесь, что профиль агента '{AGENT_NAME}' создан корректно."
         )
 
     with open(yaml_path, "r", encoding="utf-8") as f:
