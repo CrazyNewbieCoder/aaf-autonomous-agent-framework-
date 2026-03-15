@@ -93,7 +93,7 @@ memory:
   kuzu_db_path: "workspace/_data/kuzu_db"
   embedding_model: 
     name: "BAAI/bge-m3"
-    local_path: "src/layer00_utils/local_models/models--BAAI--bge-m3/snapshots/5617a9f61b028005a4858fdac845db406aefb181"
+    local_path: "src/layer00_utils/local_models/models--BAAI--bge-m3"
   workspace_garbage_collector:
     temp_files_ttl_hours: 48
 
@@ -166,6 +166,52 @@ def load_state(key: str, default=None):
 # ЛОГИКА УТИЛИТЫ
 # =====================================================================
 
+
+def check_and_download_models():
+    """Проверяет наличие тяжелых моделей и скачивает их при необходимости"""
+    
+    # 1. Проверка Embedding модели (BAAI/bge-m3)
+    model_path = os.path.join("src", "layer00_utils", "local_models", "models--BAAI--bge-m3")
+    if not os.path.exists(model_path):
+        print(f"{Y}[!] Embedding модель не найдена. Начинаю загрузку (около 2.5 ГБ)...{W}")
+        try:
+            from huggingface_hub import snapshot_download
+        except ImportError:
+            print(f"{Y}Устанавливаю huggingface_hub...{W}")
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "huggingface_hub"])
+            from huggingface_hub import snapshot_download
+        
+        snapshot_download(
+            repo_id="BAAI/bge-m3",
+            local_dir=os.path.join("src", "layer00_utils", "local_models", "models--BAAI--bge-m3"),
+            local_dir_use_symlinks=False
+        )
+        print(f"{G}[V] Embedding модель успешно загружена.{W}")
+
+    # 2. Проверка Vosk модели (для распознавания речи)
+    vosk_path = os.path.join("src", "layer00_utils", "vosk_model", "vosk-model-small-ru-0.22")
+    if not os.path.exists(vosk_path):
+        print(f"{Y}[!] Модель Vosk не найдена. Начинаю загрузку...{W}")
+        os.makedirs(os.path.dirname(vosk_path), exist_ok=True)
+        
+        # Скачиваем через curl или powershell (чтобы не тянуть лишние либы)
+        import zipfile
+        import urllib.request
+        
+        url = "https://alphacephei.com/vosk/models/vosk-model-small-ru-0.22.zip"
+        zip_path = "src/layer00_utils/vosk_model/model.zip"
+        
+        print(f"{C}Скачивание Vosk с {url}...{W}")
+        urllib.request.urlretrieve(url, zip_path)
+        
+        print(f"{C}Распаковка...{W}")
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall("src/layer00_utils/vosk_model/")
+        
+        os.remove(zip_path)
+        print(f"{G}[V] Модель Vosk готова.{W}")
+
+
 def check_docker():
     try:
         subprocess.run(["docker", "--version"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -221,7 +267,6 @@ def generate_docker_compose():
                     "POSTGRES_PASSWORD": "postgres",
                     "POSTGRES_DB": "agent_core_db"
                 },
-                "ports": ["${DB_PORT:-5433}:5432"],
                 "volumes": ["agent_pg_data:/var/lib/postgresql/data"]
             },
             "sandbox_engine": {
@@ -448,6 +493,7 @@ def process_command(args_list):
         cmd_auth(args.agent)
 
     elif args.command == "start":
+        check_and_download_models()
         check_docker()
         generate_docker_compose()
         if not args.agent or args.agent.lower() == "all":
