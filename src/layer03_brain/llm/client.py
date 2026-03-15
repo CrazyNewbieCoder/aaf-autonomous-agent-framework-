@@ -12,9 +12,8 @@ load_dotenv(dotenv_path=env_path)
 
 API_URL = os.getenv("API_URL")
 
-# Собираем все ключи и отфильтровываем пустые
-raw_keys = [os.getenv(f"LLM_API_KEY_{i}") for i in range(1, 16)]
-ALL_KEYS = [key for key in raw_keys if key]
+# Ищем в переменных окружения все ключи, которые начинаются на "LLM_API_KEY_" и не пустые
+ALL_KEYS = [value for key, value in os.environ.items() if key.startswith("LLM_API_KEY_") and value.strip()]
 
 STATE_FILE = "workspace/api_keys_state.json"
 

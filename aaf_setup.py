@@ -26,7 +26,7 @@ identity:
 llm:
   model_name: "gemini-flash-latest"
   vision_model: "gemini-3.1-flash-lite-preview"
-  available_models:
+  available_models: # Агент по запросу может сам изменить свою модель из списка доступных
     - "gemini-3.1-pro-high"
     - "gemini-flash-latest"
     - "gemini-3.1-flash-lite-preview"
@@ -51,7 +51,7 @@ llm:
         dialogue_limit: 30
       thoughts:
         thoughts_limit: 10
-        actions_limit: 20
+        actions_limit: 30
         dialogue_limit: 40
 
 swarm:
@@ -79,8 +79,7 @@ memory:
 
 telegram:
   agent_session_name: "agent_session"
-  agent_nickname: "username"
-  ignored_users: [708513, 777000]
+  ignored_users: [708513, 777000] # Reply и системный чат с Telegram
 
 hardware:
   weather_city: "Moscow"

@@ -10,8 +10,6 @@ from telethon import utils
 # Кэш для названий топиков: {chat_id: {topic_id: "Название"}}
 TOPIC_TITLE_CACHE = {}
 
-TG_AGENT_NICKNAME = config.telegram.agent_nickname
-
 def register_agent_events(client: TelegramClient):
     """Регистрирует события"""
 
@@ -72,11 +70,7 @@ def register_agent_events(client: TelegramClient):
             # 1. Встроенная проверка Telegram (ловит и @юзернейм, и прямые реплаи на нас)
             is_mention = getattr(event.message, 'mentioned', False)
             
-            # 2. Фоллбэк: проверка по текстовому юзернейму (если встроенная не сработала)
-            if not is_mention and TG_AGENT_NICKNAME and f"@{TG_AGENT_NICKNAME}".lower() in event.raw_text.lower():
-                is_mention = True
-            
-            # 3. Фоллбэк: ручная проверка реплая (для 100% гарантии)
+            # 2. Фоллбэк: ручная проверка реплая (для 100% гарантии)
             if not is_mention and event.is_reply:
                 try:
                     reply_msg = await event.get_reply_message()

@@ -105,7 +105,7 @@ async def _execute_single_tool(tool_call) -> dict:
     result = None
     
     if func_name in skills_registry:
-        limit = 800
+        limit = 400
 
         # Заменяем переносы строк на экранированные \n, чтобы логгер не ломался
         args_str = str(func_args).replace('\n', '\\n')

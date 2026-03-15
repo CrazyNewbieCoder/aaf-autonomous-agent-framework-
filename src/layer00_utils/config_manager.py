@@ -45,7 +45,6 @@ class RhythmsConfig(BaseModel):
 
 class TelegramConfig(BaseModel):
     agent_session_name: str
-    agent_nickname: str
     ignored_users: List[int]
 
 class EmbeddingModelConfig(BaseModel):
