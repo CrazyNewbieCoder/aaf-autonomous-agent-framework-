@@ -50,13 +50,17 @@ def change_thoughts_interval(seconds: int) -> str:
     parameters={"lines": "Количество последних строк для чтения (по умолчанию 50)."}
 )
 async def read_recent_logs(lines: int = 50) -> str:
+    from src.layer00_utils.env_manager import AGENT_NAME # <--- Добавляем импорт здесь
+
     current_dir = Path(__file__).resolve()
     src_dir = next((p for p in current_dir.parents if p.name == "src"), None)
     
     if not src_dir:
         return "Ошибка: Не удалось найти директорию src."
         
-    log_path = src_dir / "logs" / "system.log" 
+    # Теперь путь ведет в папку конкретного агента: Agents/NAME/logs/system.log
+    project_root = src_dir.parent
+    log_path = project_root / "Agents" / AGENT_NAME / "logs" / "system.log"
     
     def _read_tail():
         if not os.path.exists(log_path):
@@ -69,7 +73,7 @@ async def read_recent_logs(lines: int = 50) -> str:
         
     try:
         result = await asyncio.to_thread(_read_tail)
-        return f"Последние {lines} строк из логов системы:\n\n{result}"
+        return f"Последние {lines} строк из логов агента {AGENT_NAME}:\n\n{result}"
     except Exception as e:
         return f"Ошибка при чтении логов: {e}"
     

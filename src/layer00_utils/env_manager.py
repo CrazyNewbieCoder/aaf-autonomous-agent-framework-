@@ -3,7 +3,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 
-# 1. Получаем имя агента из системы (по умолчанию 'default_agent' для обратной совместимости)
+# Получаем имя агента из системы (по умолчанию 'default_agent' для обратной совместимости)
 AGENT_NAME = os.getenv("AGENT_NAME", "default_agent")
 
 def load_agent_env():
