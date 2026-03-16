@@ -27,9 +27,11 @@ async def build_proactivity_context() -> str:
         
         results = await asyncio.gather(
             global_state_monitoring.get_global_state(),
+
             memory_manager.get_formatted_thoughts(limit=limits.thoughts_limit),
             get_recent_agent_actions(limit=limits.actions_limit),
             get_clear_recent_dialogue(limit=limits.dialogue_limit),
+
             watchdog.get_system_modules_report(),
             events_monitoring.get_background_events(),
             get_all_mental_states(),
@@ -42,9 +44,11 @@ async def build_proactivity_context() -> str:
         )
 
         global_state = _safe_get(results[0]) 
+
         recent_thoughts = _safe_get(results[1])
         recent_actions = _safe_get(results[2])
         recent_dialogues = _safe_get(results[3])
+        
         system_health = _safe_get(results[4]) 
         background_events = _safe_get(results[5]) 
         mental_state = _safe_get(results[6])

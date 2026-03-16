@@ -1,8 +1,10 @@
 import asyncio
+
 from src.layer00_utils.config_manager import config
 from src.layer00_utils.logger import system_logger
 from src.layer00_utils.watchdog.watchdog import watchdog
 from src.layer00_utils.workspace import workspace_manager
+
 from src.layer01_datastate.memory_manager import memory_manager
 from src.layer01_datastate.global_state.global_state_monitoring import global_state_monitoring
 from src.layer01_datastate.sql_db.management.mental_state import get_all_mental_states
@@ -11,6 +13,7 @@ from src.layer01_datastate.sql_db.management.long_term_tasks import get_all_task
 from src.layer01_datastate.sql_db.management.agent_actions import get_recent_agent_actions
 from src.layer01_datastate.event_bus.events import EventConfig
 from src.layer01_datastate.graph_db.graph_db_management import get_graph_rag_data
+
 from src.layer03_brain.agent.skills.telegram.logic import get_unread_tg_summary
 from src.layer03_brain.llm.context.helpers import (
     _format_event, _extract_query_from_event, _safe_get, 
@@ -18,10 +21,11 @@ from src.layer03_brain.llm.context.helpers import (
     extract_graph_anchors_from_text, SUPERNODES
 )
 from src.layer03_brain.llm.client import key_manager
+
 from src.layer04_swarm.manager import swarm_manager
 
 async def build_event_driven_context(event: EventConfig, args: tuple = None, kwargs: dict = None) -> str:
-    """Собирает контекст для ответа на входящее событие (Event-Driven) с поддержкой Reverse G-RAG"""
+    """Собирает контекст для ответа на входящее событие (Event-Driven) с поддержкой Graph-RAG"""
     from src.layer03_brain.agent.engine.engine import brain_engine
     from src.layer03_brain.events_monitoring import events_monitoring
     try:
@@ -44,9 +48,11 @@ async def build_event_driven_context(event: EventConfig, args: tuple = None, kwa
         results = await asyncio.gather(
             global_state_monitoring.get_global_state(),
             get_all_mental_states(),
+
             memory_manager.get_formatted_thoughts(limit=limits.thoughts_limit),
             get_recent_agent_actions(limit=limits.actions_limit),
             get_clear_recent_dialogue(limit=limits.dialogue_limit, exclude_keywords=exclude_kws),
+
             get_unread_tg_summary(),
             watchdog.get_system_modules_report(),
             _get_macro_architecture_map(),
@@ -59,9 +65,11 @@ async def build_event_driven_context(event: EventConfig, args: tuple = None, kwa
 
         global_state = _safe_get(results[0])
         mental_state = _safe_get(results[1])
+
         recent_thoughts = _safe_get(results[2])
         recent_actions = _safe_get(results[3])
         recent_dialogues = _safe_get(results[4])
+
         unread_tg = _safe_get(results[5])
         system_health = _safe_get(results[6])
         macro_architecture_map = _safe_get(results[7])
@@ -72,7 +80,7 @@ async def build_event_driven_context(event: EventConfig, args: tuple = None, kwa
 
 
         # ===================================================================================
-        # GRAPH-RAG КАСКАД
+        # GRAPH-RAG
         # ===================================================================================
         
         # Шаг 1: Первичный Вектор (Смысл)
@@ -80,7 +88,7 @@ async def build_event_driven_context(event: EventConfig, args: tuple = None, kwa
         initial_memories = await memory_manager.get_raw_memories([search_query])
         initial_text = " ".join([m['text'] for m in initial_memories])
 
-        # Шаг 2: Парсинг Якорей (Смысл -> Граф)
+        # Шаг 2: парсинг якорей (Смысл -> Граф)
         # Ищем узлы и в исходном сообщении, и в том, что достали из памяти
         combined_text_for_parsing = f"{search_query}\n{initial_text}"
         
@@ -90,7 +98,7 @@ async def build_event_driven_context(event: EventConfig, args: tuple = None, kwa
         all_targets = list(set(explicit_targets + implicit_targets))
         all_targets = [t for t in all_targets if t not in SUPERNODES]
 
-        # Шаг 3: Граф (Интуиция Depth 1 & 2)
+        # Шаг 3: Граф (интуиция depth 1 & 2)
         graph_context = "Нет релевантных связей в графе для текущего события."
         associated_nodes = []
         
@@ -98,10 +106,10 @@ async def build_event_driven_context(event: EventConfig, args: tuple = None, kwa
             system_logger.info(f"[Graph-RAG] Извлечены узлы для анализа: {all_targets}")
             graph_context, associated_nodes = await get_graph_rag_data(all_targets)
 
-        # Шаг 4: Вторичный Вектор (Экспансия)
+        # Шаг 4: Вторичный вектор 
         secondary_memories = []
         if associated_nodes:
-            system_logger.info(f"[Graph-RAG] Интуиция сработала. Расширен поиск по узлам: {associated_nodes}")
+            system_logger.info(f"[Graph-RAG] Расширен поиск по узлам: {associated_nodes}")
             secondary_memories = await memory_manager.get_raw_memories(associated_nodes)
 
         # Склеиваем и форматируем (с дедупликацией)

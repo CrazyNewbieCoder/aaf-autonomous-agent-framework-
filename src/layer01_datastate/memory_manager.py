@@ -94,11 +94,11 @@ class MemoryManager:
     
     async def get_all_vector_memory(self, collection_name: str) -> str:
         """Возвращает все записи из указанной векторной коллекции"""
-        if collection_name not in ["user_vector_db", "agent_vector_db", "agent_thoughts_vector_db"]:
+        if collection_name not in["user_vector_db", "agent_vector_db", "agent_thoughts_vector_db"]:
             return "Ошибка: Неверное имя коллекции."
             
-        # Функция синхронная, поэтому запускаем в отдельном потоке, чтобы не блочить Event Loop
-        result = await asyncio.to_thread(get_all_entries_in_vector_db, collection_name)
+        # Декоратор WatchDog уже делает эту функцию асинхронной и закидывает в to_thread
+        result = await get_all_entries_in_vector_db(collection_name)
         return result
 
     async def manage_entity(self, action: str, name: str, category: str = None, tier: str = None, description: str = None, status: str = None, context: str = None, rules: str = None) -> str:
