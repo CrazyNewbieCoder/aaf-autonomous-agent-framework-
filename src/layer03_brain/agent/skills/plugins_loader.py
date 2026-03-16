@@ -25,17 +25,14 @@ def load_custom_plugins():
         module_name = f"custom_plugin_{py_file.stem}"
         
         try:
-            # Магия динамического импорта
             spec = importlib.util.spec_from_file_location(module_name, py_file)
-            module = importlib.util.module_from_spec(spec)
-            
-            # Регистрируем модуль в sys.modules для порядка
-            sys.modules[module_name] = module 
-            
-            # Выполняем код модуля. В этот момент срабатывают @llm_skill
-            spec.loader.exec_module(module)
-            
-            system_logger.info(f"[Plugin Loader] Успешно загружен плагин: {py_file.name}")
+            if spec and spec.loader:
+                module = importlib.util.module_from_spec(spec)
+                sys.modules[module_name] = module 
+                spec.loader.exec_module(module)
+                system_logger.info(f"[Plugin Loader] Успешно загружен плагин: {py_file.name}")
+            else:
+                system_logger.error(f"[Plugin Loader] Не удалось создать loader для '{py_file.name}'")
             
         except Exception as e:
             # Перехватываем ошибки (например, SyntaxError), чтобы агент не упал при старте

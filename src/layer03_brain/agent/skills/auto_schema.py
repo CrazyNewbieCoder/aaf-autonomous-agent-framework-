@@ -69,8 +69,6 @@ def llm_skill(description: str, parameters: dict = None):
             }
         }
         
-        # Защита от кривых API-прокси (OneAPI/LiteLLM):
-        # Добавляем блок parameters ТОЛЬКО если у функции реально есть аргументы.
         if properties:
             schema["function"]["parameters"] = {
                 "type": "object",
@@ -79,6 +77,8 @@ def llm_skill(description: str, parameters: dict = None):
             if required:
                 schema["function"]["parameters"]["required"] = required
 
+        global_openai_tools[:] =[tool for tool in global_openai_tools if tool["function"]["name"] != func_name]
+        
         # Автоматически добавляем схему в список
         global_openai_tools.append(schema)
 
