@@ -2,13 +2,13 @@ from src.layer00_utils.config_manager import config
 from src.layer00_utils.logger import system_logger
 from src.layer00_utils.watchdog.watchdog import event_driven_module, proactivity_module, thoughts_module
 from src.layer00_utils._tools import token_tracker, count_tokens
+
 from src.layer01_datastate.event_bus.event_bus import event_bus
 from src.layer01_datastate.event_bus.events import Events
 from src.layer01_datastate.sql_db.management.personality_parameters import get_formatted_personality
+
 from src.layer03_brain.llm.prompt.prompt_manager import prompt_manager
-from src.layer03_brain.llm.context.event_driven_context import build_event_driven_context
-from src.layer03_brain.llm.context.proactivity_context import build_proactivity_context
-from src.layer03_brain.llm.context.thoughts_context import build_thoughts_context
+from src.layer03_brain.llm.context.builder import build_event_driven_context, build_proactivity_context, build_thoughts_context
 from src.layer03_brain.agent.skills.registry import openai_tools
 from src.layer03_brain.agent.engine.react import run_react_loop
 

@@ -82,7 +82,7 @@ rhythms:
   proactivity_interval_sec: 900
   thoughts_interval_sec: 1800
   min_proactivity_cooldown_sec: 120
-  reduction_medium_sec: 120
+  reduction_medium_sec: 180
   reduction_low_sec: 60
   telemetry_poll_sec: 60
   weather_poll_sec: 1800
