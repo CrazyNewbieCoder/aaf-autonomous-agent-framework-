@@ -37,7 +37,7 @@ class ReActCycles:
         ]
 
         # Подсчет токенов для логгинга
-        tokens_system = count_tokens(system_instruction)
+        tokens_system = count_tokens(system_instruction) # Также включен текстовый L0-справочник
         tokens_context = count_tokens(current_context)
         
         # Считаем токены инструментов (конвертируем JSON-схемы в строку)
