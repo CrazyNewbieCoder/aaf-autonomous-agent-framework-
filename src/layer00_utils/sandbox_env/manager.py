@@ -1,5 +1,4 @@
-# Файл: src/layer00_utils/sandbox_env/manager.py
-
+import os
 import subprocess
 from src.layer00_utils.logger import system_logger
 from src.layer00_utils.workspace import workspace_manager
@@ -58,6 +57,7 @@ def _start_background_python_script(filename: str) -> str:
         "--network=host", 
         # Передаем имя агента внутрь демона
         "-e", f"MASTER_AGENT=agent_{AGENT_NAME.lower()}",
+        "-e", f"TZ={os.getenv('TZ', 'UTC')}",
         "-v", f"{sandbox_path}:{sandbox_path}",
         "-w", sandbox_path,                 
         "python:3.11-slim",                             

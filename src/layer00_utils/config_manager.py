@@ -83,15 +83,6 @@ class MemoryConfig(BaseModel):
 
     workspace_garbage_collector: GarbageCollectorConfig
 
-class VoiceConfig(BaseModel):
-    tts_voice: str
-    stt_model_path: str
-    sample_rate: int
-
-class HardwareConfig(BaseModel):
-    weather_city: str
-    voice: VoiceConfig
-
 class SystemFlags(BaseModel):
     enable_proactivity: bool
     enable_thoughts: bool
@@ -99,6 +90,7 @@ class SystemFlags(BaseModel):
     headless_mode: bool
 
 class SystemConfig(BaseModel):
+    weather_city: str
     logging_level: str
     log_retention_days: int
     flags: SystemFlags
@@ -111,7 +103,6 @@ class AppConfig(BaseModel):
     rhythms: RhythmsConfig
     telegram: TelegramConfig
     memory: MemoryConfig
-    hardware: HardwareConfig
     system: SystemConfig
 
 def load_config() -> AppConfig:

@@ -21,17 +21,35 @@ class EventsMonitoring:
             system_logger.warning(f"Получено неизвестное событие: {event}")
             return
 
-        # Теперь используем event_config вместо event
-        if event_config.level == EventLevel.CRITICAL:
-            await brain_engine.add_event_to_queue(event_config, args, kwargs)
+        if event_config.level in [EventLevel.CRITICAL, EventLevel.HIGH]:
+            from src.layer03_brain.agent.engine.state import brain_state
+            
+            # Если сейчас мозг спит - добавляем событие в очередь выполнения
+            if brain_state["status"] == "sleeping":
+                await brain_engine.add_event_to_queue(event_config, args, kwargs)
 
-        elif event_config.level == EventLevel.HIGH:
-            await brain_engine.add_event_to_queue(event_config, args, kwargs)
+            # Если сейчас думает - прокидываем в текущий ReAct цикл новое входящее событие
+            else:
+                from src.layer03_brain.llm.context.builder import context_builder
+                alert_text = context_builder._format_event(event_config, args, kwargs)
+                brain_state["interrupt_buffer"].append(alert_text)
+                system_logger.info(f"[EventsMonitoring] Входящее событие '{event_config.name}' отправлено в активный ReAct цикл.")
 
         elif event_config.level == EventLevel.MEDIUM:
-            postponed_event = {"event": event_config, "args": args, "kwargs": kwargs}
-            self.background_events.append(postponed_event)
-            brain_engine.nudge_proactivity("MEDIUM")
+            from src.layer03_brain.agent.engine.state import brain_state
+            
+            # Если сейчас мозг спит - добавляем событие в очередь выполнения
+            if brain_state["status"] == "sleeping":
+                postponed_event = {"event": event_config, "args": args, "kwargs": kwargs}
+                self.background_events.append(postponed_event)
+                brain_engine.nudge_proactivity("MEDIUM")
+
+            # Если сейчас думает - прокидываем в текущий ReAct цикл новое входящее событие
+            else:
+                from src.layer03_brain.llm.context.builder import context_builder
+                alert_text = context_builder._format_event(event_config, args, kwargs)
+                brain_state["interrupt_buffer"].append(alert_text)
+                system_logger.info(f"[EventsMonitoring] Входящее событие '{event_config.name}' отправлено в активный ReAct цикл.")
 
         elif event_config.level == EventLevel.LOW:
             # Игнорируем фоновые сообщения из групп, чтобы не дублировать историю диалогов

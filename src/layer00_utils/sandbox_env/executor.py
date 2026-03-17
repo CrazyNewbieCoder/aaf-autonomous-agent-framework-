@@ -1,12 +1,10 @@
-# Файл: src/layer00_utils/sandbox_env/executor.py
-
 import asyncio
+import os
 from src.layer00_utils.logger import system_logger
 from src.layer00_utils.workspace import workspace_manager
-from src.layer00_utils.env_manager import AGENT_NAME # Единый менеджер
+from src.layer00_utils.env_manager import AGENT_NAME
 from src.layer00_utils.config_manager import config
 
-# Динамически читаем лимит
 MAX_OUTPUT_LENGTH = config.llm.limits.max_file_read_chars 
 
 def _truncate_output(text: str) -> str:
@@ -17,18 +15,29 @@ def _truncate_output(text: str) -> str:
         return text[:half] + "\n\n... [ВЫВОД ОБРЕЗАН ИЗ-ЗА ЛИМИТОВ КОНТЕКСТА] ...\n\n" + text[-half:]
     return text
 
-async def execute_once(filename: str, timeout: int = 120) -> str:
+async def execute_once(vfs_filepath: str, timeout: int = 120) -> str:
     try:
-        filepath = workspace_manager.get_sandbox_file(filename)
+        # Проверяем путь через новый резолвер
+        filepath = workspace_manager.resolve_vfs_path(vfs_filepath, mode='read')
         
         if not filepath.exists():
-            return f"[Error] Файл '{filename}' не найден в директории sandbox."
+            return f"[Error] Файл '{vfs_filepath}' не найден."
 
-        system_logger.info(f"[Sandbox] Запуск '{filename}' в Docker DinD (Агент: {AGENT_NAME}, Таймаут: {timeout}с).")
+        # Гарантируем, что запуск происходит строго из песочницы
+        if not vfs_filepath.startswith("sandbox/"):
+            return "[Error] Выполнение скриптов разрешено только из директории 'sandbox/'."
 
-        # Динамический путь для Docker Wolumes для каждого отдельного агента
-        # /app/Agents/{AGENT_NAME}/workspace/sandbox
-        sandbox_path = f"/app/Agents/{AGENT_NAME}/workspace/sandbox"
+        # Высчитываем путь относительно корня песочницы
+        rel_path = filepath.relative_to(workspace_manager.sandbox_dir).as_posix()
+        script_dir = os.path.dirname(rel_path)
+        script_name = os.path.basename(rel_path)
+
+        system_logger.info(f"[Sandbox] Запуск '{vfs_filepath}' в Docker DinD (Агент: {AGENT_NAME}, Таймаут: {timeout}с).")
+
+        sandbox_root_in_docker = f"/app/Agents/{AGENT_NAME}/workspace/sandbox"
+        
+        # Устанавливаем рабочую директорию прямо в папку со скриптом
+        working_dir_in_docker = f"{sandbox_root_in_docker}/{script_dir}" if script_dir else sandbox_root_in_docker
 
         docker_cmd = [
             "docker", "run",
@@ -37,13 +46,12 @@ async def execute_once(filename: str, timeout: int = 120) -> str:
             "--cpus=1",                                     
             "--pids-limit=100", 
             "--network=host",
-            # Передаем имя агента внутрь эфемерного контейнера для agent_sdk.py
             "-e", f"MASTER_AGENT=agent_{AGENT_NAME.lower()}",
-            # Пробрасываем ТОЛЬКО папку текущего агента
-            "-v", f"{sandbox_path}:{sandbox_path}",         
-            "-w", sandbox_path,
+            "-e", f"TZ={os.getenv('TZ', 'UTC')}",
+            "-v", f"{sandbox_root_in_docker}:{sandbox_root_in_docker}",         
+            "-w", working_dir_in_docker,
             "python:3.11-slim",                             
-            "python", filename                              
+            "python", script_name                              
         ]
 
         process = await asyncio.create_subprocess_exec(
@@ -59,7 +67,7 @@ async def execute_once(filename: str, timeout: int = 120) -> str:
                 process.kill()
             except OSError:
                 pass
-            system_logger.warning(f"[Sandbox] Скрипт '{filename}' превысил таймаут {timeout}с и был убит.")
+            system_logger.warning(f"[Sandbox] Скрипт '{vfs_filepath}' превысил таймаут {timeout}с и был жестоко убит (без суда и следствия).")
             return f"[Timeout Error] Скрипт выполнялся дольше {timeout} секунд."
 
         out_str = stdout.decode('utf-8', errors='replace').strip()
@@ -72,9 +80,11 @@ async def execute_once(filename: str, timeout: int = 120) -> str:
         if err_str:
             result += f"\n\n--- STDERR ---\n{err_str}"
 
-        system_logger.debug(f"[Sandbox] Выполнение '{filename}' завершено (Код выхода: {process.returncode}).")
+        system_logger.debug(f"[Sandbox] Выполнение '{vfs_filepath}' завершено (Код выхода: {process.returncode}).")
         return result
 
+    except PermissionError as e:
+        return f"[Security] {e}"
     except Exception as e:
-        system_logger.error(f"[Sandbox] Ошибка выполнения '{filename}': {e}")
+        system_logger.error(f"[Sandbox] Ошибка выполнения '{vfs_filepath}': {e}")
         return f"[System Error] Внутренняя ошибка песочницы: {e}"

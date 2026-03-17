@@ -61,18 +61,6 @@ class Events:
         requires_attention=True,
         level=EventLevel.LOW,
     )
-    TEXT_QUERY = EventConfig(
-        name="TEXT_QUERY",
-        description="Входящий запрос с терминала основного ПК",
-        requires_attention=True,
-        level=EventLevel.HIGH,
-    )
-    VOICE_QUERY = EventConfig(
-        name="VOICE_QUERY",
-        description="Входящий голосовой запрос с основного ПК",
-        requires_attention=True,
-        level=EventLevel.HIGH,
-    )
 
     # -----------------------------------------------------------
     # Общие события

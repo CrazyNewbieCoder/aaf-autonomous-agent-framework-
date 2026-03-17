@@ -2,6 +2,7 @@ import inspect
 import json
 import asyncio
 import openai
+import textwrap
 from src.layer00_utils.config_manager import config
 from src.layer00_utils.logger import system_logger
 from src.layer01_datastate.sql_db.management.agent_actions import create_agent_action
@@ -122,7 +123,7 @@ async def _execute_single_tool(tool_call) -> dict:
 
     target_func = skills_registry[skill_uri]
 
-    # --- МАГИЯ АВТО-КАСТА ТИПОВ ---
+    # МАГИЯ АВТО-КАСТА ТИПОВ
     try:
         sig = inspect.signature(target_func)
         for param_name, param in sig.parameters.items():
@@ -181,7 +182,6 @@ async def run_react_loop(messages: list, tools: list, temperature: float) -> str
 
     _dump_context_to_file(messages)
 
-
     try:
         current_steps = 0
         used_tools_history = []
@@ -191,6 +191,27 @@ async def run_react_loop(messages: list, tools: list, temperature: float) -> str
             if current_steps >= MAX_REACT_STEPS:
                 answer = f"Превышен максимальный лимит ({MAX_REACT_STEPS}) по вызовам модели."
                 break
+
+            # Проверка буфера прерываний
+            if brain_state["interrupt_buffer"]:
+                interrupts = "\n\n".join(brain_state["interrupt_buffer"])
+                brain_state["interrupt_buffer"].clear() # Очищаем буфер
+                
+                injection_msg = {
+                    "role": "user",
+                    "content": textwrap.dedent(f"""
+                        [SYSTEM INTERRUPT: Входящее событие в реальном времени]
+                        Во время текущего ReAct цикла в систему поступили новые данные:
+                        
+                        {interrupts}
+                        
+                        Интегрируй полученную информацию в текущий контекст. 
+                        Ты имеешь право отреагировать на событие без прерывания основной цепочки действий. 
+                        Скорректируй или продолжи выполнение текущего плана с учетом новых вводных.
+                    """)
+                }
+                messages.append(injection_msg)
+                system_logger.info("[BrainEngine] Контекст обновлен. В ReAct передано новое событие.")
 
             system_logger.info(f"[BrainEngine] Инициализирован запрос к модели {LLM_MODEL} (Шаг {current_steps}).")
 

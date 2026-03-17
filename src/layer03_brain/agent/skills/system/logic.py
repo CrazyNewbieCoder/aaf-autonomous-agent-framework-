@@ -7,7 +7,7 @@ from src.layer00_utils.logger import system_logger
 from src.layer03_brain.agent.skills.auto_schema import llm_skill
 
 @llm_skill(
-    description="Изменяет интервал твоего проактивного цикла.",
+    description="Изменяет интервал цикла проактивности.",
     parameters={"seconds": "Новый интервал в секундах"}
 )
 def change_proactivity_interval(seconds: int) -> str:
@@ -27,7 +27,7 @@ def change_proactivity_interval(seconds: int) -> str:
     
 
 @llm_skill(
-    description="Изменяет интервал твоего цикла интроспекции.",
+    description="Изменяет интервал цикла интроспекции.",
     parameters={"seconds": "Новый интервал в секундах"}
 )
 def change_thoughts_interval(seconds: int) -> str:
@@ -46,11 +46,11 @@ def change_thoughts_interval(seconds: int) -> str:
 
 
 @llm_skill(
-    description="Читает последние записи из твоего системного лога системы (system.log). Полезно для дебаггинга.",
+    description="Читает последние записи из системного лога системы AAF.",
     parameters={"lines": "Количество последних строк для чтения (по умолчанию 50)."}
 )
 async def read_recent_logs(lines: int = 50) -> str:
-    from src.layer00_utils.env_manager import AGENT_NAME # <--- Добавляем импорт здесь
+    from src.layer00_utils.env_manager import AGENT_NAME
 
     current_dir = Path(__file__).resolve()
     src_dir = next((p for p in current_dir.parents if p.name == "src"), None)
@@ -92,7 +92,7 @@ async def shutdown_system() -> str:
 
 
 @llm_skill(
-    description="Изменяет твое вычислительное ядро (LLM-модель).",
+    description="Изменяет основную LLM-модель.",
     parameters={
         "new_model": {
             "description": "Точное название новой модели.", 

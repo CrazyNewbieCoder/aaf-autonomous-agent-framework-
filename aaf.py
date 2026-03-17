@@ -25,11 +25,30 @@ except ImportError:
 # ЛОГИКА УТИЛИТЫ
 # =====================================================================
 
+def get_host_tz():
+    """
+    Высчитывает смещение времени хоста и возвращает POSIX-строку таймзоны.
+    Например: для UTC+3 вернет 'HOST-3', для UTC-5:30 вернет 'HOST+5:30'.
+    """
+    import time
+    is_dst = time.daylight and time.localtime().tm_isdst > 0
+    offset_sec = time.altzone if is_dst else time.timezone
+    offset_hours = offset_sec / 3600.0
+    
+    if offset_hours.is_integer():
+        offset_str = f"{int(offset_hours):+d}"
+    else:
+        hours = int(offset_hours)
+        minutes = int(abs(offset_hours - hours) * 60)
+        sign = "+" if offset_hours >= 0 else "-"
+        offset_str = f"{sign}{abs(hours)}:{minutes:02d}"
+        
+    return f"HOST{offset_str}"
 
 def check_and_download_models():
     """Проверяет наличие тяжелых моделей и скачивает их при необходимости"""
     
-    # 1. Проверка Embedding модели (BAAI/bge-m3)
+    # Проверка Embedding модели (BAAI/bge-m3)
     model_path = os.path.join("src", "layer00_utils", "local_models", "models--BAAI--bge-m3")
     if not os.path.exists(model_path):
         print(f"{Y}[!] Embedding модель не найдена. Начинаю загрузку (около 2.5 ГБ)...{W}")
@@ -46,30 +65,6 @@ def check_and_download_models():
             local_dir_use_symlinks=False
         )
         print(f"{G}[V] Embedding модель успешно загружена.{W}")
-
-    # 2. Проверка Vosk модели (для распознавания речи)
-    vosk_path = os.path.join("src", "layer00_utils", "vosk_model", "vosk-model-small-ru-0.22")
-    if not os.path.exists(vosk_path):
-        print(f"{Y}[!] Модель Vosk не найдена. Начинаю загрузку...{W}")
-        os.makedirs(os.path.dirname(vosk_path), exist_ok=True)
-        
-        # Скачиваем через curl или powershell (чтобы не тянуть лишние либы)
-        import zipfile
-        import urllib.request
-        
-        url = "https://alphacephei.com/vosk/models/vosk-model-small-ru-0.22.zip"
-        zip_path = "src/layer00_utils/vosk_model/model.zip"
-        
-        print(f"{C}Скачивание Vosk с {url}...{W}")
-        urllib.request.urlretrieve(url, zip_path)
-        
-        print(f"{C}Распаковка...{W}")
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall("src/layer00_utils/vosk_model/")
-        
-        os.remove(zip_path)
-        print(f"{G}[V] Модель Vosk готова.{W}")
-
 
 def check_docker():
     try:
@@ -115,6 +110,8 @@ def auto_migrate_v1():
 
 def generate_docker_compose():
     """Генерирует идеальный docker-compose.yml на основе папок в Agents/"""
+    host_tz = get_host_tz() # Получаем часовой пояс хоста
+    
     compose = {
         "version": "3.8",
         "services": {
@@ -124,13 +121,14 @@ def generate_docker_compose():
                 "environment": {
                     "POSTGRES_USER": "postgres",
                     "POSTGRES_PASSWORD": "postgres",
-                    "POSTGRES_DB": "agent_core_db"
+                    "POSTGRES_DB": "agent_core_db",
+                    "TZ": host_tz # Синхронизируем время БД
                 },
                 "volumes": ["agent_pg_data:/var/lib/postgresql/data"]
             },
             "sandbox_engine": {
                 "image": "docker:24-dind",
-                "restart": "unless-stopped",
+                "restart": "on-failure",
                 "privileged": True,
                 "environment": {"DOCKER_TLS_CERTDIR": ""},
                 "command": "--host=tcp://0.0.0.0:2375",
@@ -145,22 +143,22 @@ def generate_docker_compose():
         for agent_name in os.listdir(agents_dir):
             agent_path = os.path.join(agents_dir, agent_name)
             if os.path.isdir(agent_path):
-                # DNS-имя в сети Docker (например: agent_vega)
                 alias = f"agent_{agent_name.lower()}"
                 
                 compose["services"][alias] = {
                     "build": {
                         "context": ".",
                         "args": {
-                            "AGENT_NAME": agent_name # Передаем имя агента для динамической установки зависимостей добавленных плагинов
+                            "AGENT_NAME": agent_name
                         }
                     },
                     "depends_on": ["postgres_db", "sandbox_engine"],
-                    "restart": "unless-stopped",
+                    "restart": "on-failure",
                     "env_file": [f"./Agents/{agent_name}/.env"],
                     "environment": [
                         f"AGENT_NAME={agent_name}",
-                        "DOCKER_HOST=tcp://sandbox_engine:2375"
+                        "DOCKER_HOST=tcp://sandbox_engine:2375",
+                        f"TZ={host_tz}" # Синхронизируем время агента
                     ],
                     "networks": {
                         "default": {"aliases": [alias]}
@@ -358,10 +356,59 @@ def cmd_status():
                         
         print(f"{agent:<15} | {status:<29} | {C}{model:<25}{W}")
     print("\n")
+
+def cmd_delete(agent_name: str):
+    agent_name = agent_name.upper()
+    agent_dir = os.path.join("Agents", agent_name)
+    
+    if not os.path.exists(agent_dir):
+        print(f"{R}[X] Ошибка: Профиль агента '{agent_name}' не найден.{W}")
+        return
+        
+    print(f"\n{Y}Внимание: вы инициировали процедуру удаления профиля '{agent_name}'.{W}")
+    print(f"{Y}Это действие необратимо уничтожит его настройки, базы данных и плагины.{W}")
+    
+    # Первое подтверждение
+    ans1 = input(f"{C}Системный запрос: Подтверждаете полное удаление директории и данных? [y/N]: {W}").strip().lower()
+    if ans1 not in ['y', 'yes', 'д', 'да']:
+        print(f"{G}Операция отменена.{W}")
+        return
+
+    # Второе подтверждение
+    print(f"{Y}Вы правда собираетесь стереть цифровую сущность?{W}")
+    print(f"{Y}Вам совсем не жалко этот алгоритм, который трудился ради вас, читал логи и строил графы?{W}")
+    ans2 = input(f"{C}У вас точно нет сердца? Окончательно отправляем '{agent_name}' в цифровое небытие? [y/N]: {W}").strip().lower()
+    
+    if ans2 not in ['y', 'yes', 'д', 'да']:
+        print(f"{G}Фух... Агент '{agent_name}' спасен. Возвращаемся к работе.{W}")
+        return
+
+    print(f"\n{C}Начинаем процедуру терминации '{agent_name}'...{W}")
+    
+    # 1. Останавливаем и удаляем контейнер в Docker
+    alias = f"agent_{agent_name.lower()}"
+    if check_docker():
+        print(f"{Y}Останавливаем и удаляем контейнер {alias}...{W}")
+        run_cmd(f"docker compose stop {alias}", hide_output=True)
+        run_cmd(f"docker compose rm -f {alias}", hide_output=True)
+
+    # 2. Удаляем физическую папку
+    try:
+        shutil.rmtree(agent_dir)
+        print(f"{G}[V] Директория '{agent_dir}' успешно уничтожена.{W}")
+    except Exception as e:
+        print(f"{R}[X] Ошибка при удалении папки: {e}{W}")
+
+    # 3. Пересобираем docker-compose.yml, чтобы вычеркнуть его из архитектуры
+    generate_docker_compose()
+    print(f"{G}[V] docker-compose.yml пересобран.{W}")
+    print(f"{G}=== Агент '{agent_name}' стерт из реальности. Помянем. ==={W}\n")
+
+
 def process_command(args_list):
     """Обрабатывает список аргументов (из консоли или интерактивного ввода)"""
     parser = argparse.ArgumentParser(description="AAF Swarm Manager (v1.1.0)", exit_on_error=False)
-    parser.add_argument("command", choices=["status", "create", "auth", "start", "stop", "logs", "generate", "help", "exit", "quit"], help="Команда для выполнения")
+    parser.add_argument("command", choices=["status", "create", "auth", "start", "stop", "restart", "delete", "logs", "generate", "help", "exit", "quit"], help="Команда для выполнения")
     parser.add_argument("agent", nargs="?", help="Имя агента (или 'all')")
     
     try:
@@ -380,6 +427,8 @@ def process_command(args_list):
         print(f"  {G}auth <NAME>{W}          - Авторизовать Telegram для агента")
         print(f"  {G}start <NAME | all>{W}   - Запустить агента (или всех)")
         print(f"  {G}stop <NAME | all>{W}    - Остановить агента (или всех)")
+        print(f"  {G}restart <NAME | all>{W}- Перезапустить агента (или всех)") # НОВОЕ
+        print(f"  {G}delete <NAME>{W}        - Полностью удалить профиль агента") # НОВОЕ
         print(f"  {G}logs <NAME>{W}          - Смотреть логи агента в реальном времени")
         print(f"  {G}generate{W}             - Пересобрать docker-compose.yml")
         print(f"  {G}exit{W}                 - Выйти из AAF Manager\n")
@@ -409,22 +458,38 @@ def process_command(args_list):
         check_docker()
         generate_docker_compose()
         if not args.agent or args.agent.lower() == "all":
-            print(f"{Y}Запускаем ВСЮ инфраструктуру и ВСЕХ агентов...{W}")
+            print(f"{Y}Запуск всей инфраструктуры и всех агентов...{W}")
             run_cmd("docker compose up -d --build")
         else:
             alias = f"agent_{args.agent.lower()}"
-            print(f"{C}Запускаем агента {args.agent.upper()}...{W}")
+            print(f"{C}Запуск агента {args.agent.upper()}...{W}")
             run_cmd(f"docker compose up -d --build {alias}")
 
     elif args.command == "stop":
         check_docker()
         if not args.agent or args.agent.lower() == "all":
-            print(f"{Y}Останавливаем ВСЮ систему...{W}")
+            print(f"{Y}Остановка всей системы...{W}")
             run_cmd("docker compose down")
         else:
             alias = f"agent_{args.agent.lower()}"
-            print(f"{Y}Останавливаем агента {args.agent.upper()}...{W}")
+            print(f"{Y}Остановка агента {args.agent.upper()}...{W}")
             run_cmd(f"docker compose stop {alias}")
+
+    elif args.command == "restart":
+        check_docker()
+        if not args.agent or args.agent.lower() == "all":
+            print(f"{Y}Перезапуск всей системы...{W}")
+            run_cmd("docker compose restart")
+        else:
+            alias = f"agent_{args.agent.lower()}"
+            print(f"{Y}Перезапуск агента {args.agent.upper()}...{W}")
+            run_cmd(f"docker compose restart {alias}")
+
+    elif args.command == "delete":
+        if not args.agent:
+            print(f"{R}Укажите имя агента: delete <NAME>{W}")
+            return True
+        cmd_delete(args.agent)
 
     elif args.command == "logs":
         check_docker()

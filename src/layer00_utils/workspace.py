@@ -2,17 +2,19 @@ import time
 from pathlib import Path
 from datetime import datetime
 from src.layer00_utils.logger import system_logger
-from src.layer00_utils.env_manager import AGENT_NAME # Импортируем имя текущего агента
+from src.layer00_utils.env_manager import AGENT_NAME
 
 class WorkspaceManager:
     def __init__(self):
         current_dir = Path(__file__).resolve()
-        src_dir = next((p for p in current_dir.parents if p.name == "src"), None)
+        src_dir_path = next((p for p in current_dir.parents if p.name == "src"), None)
         
-        if src_dir:
-            self.project_root = src_dir.parent
+        if src_dir_path:
+            self.project_root = src_dir_path.parent
+            self.src_dir = src_dir_path
         else:
             self.project_root = current_dir.parent.parent.parent
+            self.src_dir = self.project_root / "src"
 
         # Динамический путь до изолированного рабочего пространства отдельного агента
         self.workspace_dir = self.project_root / "Agents" / AGENT_NAME / "workspace"
@@ -23,24 +25,76 @@ class WorkspaceManager:
         """Создает необходимые папки при старте системы"""
         self.temp_dir.mkdir(parents=True, exist_ok=True)
         self.sandbox_dir.mkdir(parents=True, exist_ok=True)
-        system_logger.info(f"[Workspace] Инициализирован для агента '{AGENT_NAME}'. Путь: {self.workspace_dir}")
+        system_logger.info(f"[Workspace] Инициализирован для '{AGENT_NAME}'. VFS зоны: sandbox/, src/")
+
+    def resolve_vfs_path(self, vfs_path: str, mode: str = 'read') -> Path:
+        """
+        Преобразует виртуальный путь агента в абсолютный путь системы.
+        READ: Разрешено читать любой файл в контейнере.
+        WRITE/DELETE: Строго заперты внутри песочницы (sandbox/).
+        .env: Заблокирован глобально и аппаратно.
+        """
+        if not vfs_path:
+            raise PermissionError("Путь не может быть пустым.")
+            
+        clean_path = vfs_path.replace("\\", "/").strip("/")
+        
+        # 1. Защита от .env
+        if ".env" in clean_path.split("/") or clean_path.endswith(".env"):
+            raise PermissionError("Security: Доступ к файлам окружения (.env) строго запрещен.")
+
+        # 2. Умный маппинг псевдонимов (чтобы агенту не нужно было писать Agents/VEGA/workspace/...)
+        if clean_path == "sandbox" or clean_path.startswith("sandbox/"):
+            rel_part = clean_path[len("sandbox"):].strip("/")
+            target_path = (self.sandbox_dir / rel_part).resolve()
+            
+        elif clean_path == "src" or clean_path.startswith("src/"):
+            rel_part = clean_path[len("src"):].strip("/")
+            target_path = (self.src_dir / rel_part).resolve()
+            
+        else:
+            # Любые другие пути (абсолютные или от корня проекта)
+            target_path = Path(clean_path)
+            if not target_path.is_absolute():
+                target_path = (self.project_root / target_path).resolve()
+            else:
+                target_path = target_path.resolve()
+
+        # 3. Повторная защита от .env (отлавливает хитрые пути)
+        if target_path.name == ".env" or target_path.suffix == ".env":
+            raise PermissionError("Security: Физический доступ к файлам .env заблокирован.")
+
+        # 4. Тюрьма для Write/Delete
+        if mode in ['write', 'delete']:
+            try:
+                target_path.relative_to(self.sandbox_dir.resolve())
+            except ValueError:
+                raise PermissionError(f"Security: Операция '{mode}' разрешена ТОЛЬКО внутри твоей песочницы (sandbox/). Доступ к '{target_path.as_posix()}' отклонен.")
+
+        return target_path
+
+    def vfs_path_to_display(self, abs_path: Path) -> str:
+        """Служебная функция: Преобразует абсолютный путь обратно в виртуальный (для логов)"""
+        try:
+            rel = abs_path.relative_to(self.sandbox_dir.resolve())
+            return f"sandbox/{rel.as_posix()}"
+        except ValueError:
+            pass
+        try:
+            rel = abs_path.relative_to(self.src_dir.resolve())
+            return f"src/{rel.as_posix()}"
+        except ValueError:
+            return abs_path.name
+
+    def get_sandbox_file(self, filename: str) -> Path:
+        """[DEPRECATED - Оставлено для обратной совместимости внутренних систем]"""
+        return self.resolve_vfs_path(f"sandbox/{filename}", mode="write")
 
     def get_temp_file(self, prefix: str = "", extension: str = "") -> Path:
         """Генерирует безопасный абсолютный путь для нового временного файла"""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:19]
         filename = f"{prefix}{timestamp}{extension}"
         return self.temp_dir / filename
-
-    def get_sandbox_file(self, filename: str) -> Path:
-        """
-        Возвращает путь к файлу в песочнице. 
-        Включает жесткую защиту от выхода за пределы папки (Path Traversal).
-        """
-        target_path = (self.sandbox_dir / filename).resolve()
-        # Проверяем, что итоговый путь действительно находится внутри sandbox_dir
-        if not str(target_path).startswith(str(self.sandbox_dir.resolve())):
-            raise PermissionError(f"[Security] Попытка выхода за пределы sandbox: {filename}")
-        return target_path
 
     def clean_temp_workspace(self) -> str:
         """Полностью очищает папку temp"""
@@ -65,7 +119,6 @@ class WorkspaceManager:
 
         for item in self.temp_dir.iterdir():
             if item.is_file():
-                # Проверяем время последней модификации файла
                 if now - item.stat().st_mtime > max_age_seconds:
                     try:
                         item.unlink()
@@ -95,18 +148,22 @@ class WorkspaceManager:
         return f"Workspace: {temp_count} файлов ({temp_mb:.2f} МБ) в temp/, {sandbox_count} файлов ({sandbox_mb:.2f} МБ) в sandbox/"
     
     def get_sandbox_files_list(self) -> str:
-        """Возвращает список файлов, находящихся в песочнице"""
+        """Динамический блок контекста: Возвращает список файлов песочницы (рекурсивно)"""
         if not self.sandbox_dir.exists():
             return "Песочница не инициализирована."
         
-        files = [f.name for f in self.sandbox_dir.iterdir() if f.is_file()]
-        
-        # Игнорируем технические файлы
-        files = [f for f in files if f not in ['.gitkeep', 'sandbox_state.json', 'agent_sdk.py']]
+        files = []
+        for p in self.sandbox_dir.rglob('*'):
+            if p.is_file():
+                # Получаем относительный путь от корня песочницы
+                rel_path = p.relative_to(self.sandbox_dir).as_posix()
+                # Игнорируем технические файлы
+                if rel_path not in ['.gitkeep', 'sandbox_state.json', 'agent_sdk.py']:
+                    files.append(f"sandbox/{rel_path}")
         
         if not files:
-            return "В песочнице сейчас пусто."
+            return "В Sandbox пусто."
             
-        return "\n".join([f"- {f}" for f in files])
+        return "\n".join([f"- {f}" for f in sorted(files)])
 
 workspace_manager = WorkspaceManager()

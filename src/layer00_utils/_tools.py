@@ -1,26 +1,17 @@
 import requests
 import os
-
 from datetime import datetime
-from PIL import Image
 from src.layer00_utils.logger import system_logger
-from src.layer00_utils.workspace import workspace_manager
 from collections import deque
 import tiktoken
+
 from src.layer00_utils.config_manager import config
 from src.layer00_utils.env_manager import load_agent_env
 
 load_agent_env()
 
-try:
-    import mss
-    import mss.tools
-    MSS_AVAILABLE = True
-except ImportError:
-    MSS_AVAILABLE = False
 
-
-CITY_NAME = config.hardware.weather_city
+CITY_NAME = config.system.weather_city
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
 
 encoding = tiktoken.get_encoding("cl100k_base")
@@ -42,7 +33,6 @@ class TokenTracker:
         
         return f"Входящих токенов: {total} (Промпт: {prompt_tokens}, Контекст: {context_tokens}, Инструменты: {tools_tokens}). За последние {len(self.history)} вызовов: {total_last_n} токенов (в среднем {avg_tokens}/вызов)."
 
-# Создаем глобальный экземпляр
 token_tracker = TokenTracker(maxlen=10)
 
 def count_tokens(text: str) -> int:
@@ -85,25 +75,3 @@ def get_datetime():
         return now.strftime("%Y-%m-%d %H:%M:%S")
     except Exception as e:
         system_logger.error(f"Ошибка при получении даты и времени: {e}")
-
-async def make_screenshot(quality: int = 70) -> str:                                          
-    if config.system.flags.headless_mode or not MSS_AVAILABLE:
-        raise RuntimeError("Скриншоты недоступны в серверном (Headless) режиме.")
-        
-    try:
-        with mss.mss() as sct:
-            all_monitors = sct.monitors[0]
-            sct_img = sct.grab(all_monitors)
-            img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
-
-            # Сохраняем во временную папку (сборщик мусора сам удалит старые скрины)
-            filepath = workspace_manager.get_temp_file(prefix="screenshot_", extension=".jpg")
-            
-            img.save(filepath, "JPEG", quality=quality, optimize=True)
-            system_logger.debug(f"Скриншот сохранен: {filepath}")
-            
-            return str(filepath)
-
-    except Exception as e:
-        system_logger.error(f"Ошибка при создании скриншота экрана: {e}")
-        raise

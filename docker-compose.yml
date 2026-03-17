@@ -10,11 +10,12 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: agent_core_db
+      TZ: HOST-3
     volumes:
     - agent_pg_data:/var/lib/postgresql/data
   sandbox_engine:
     image: docker:24-dind
-    restart: unless-stopped
+    restart: on-failure
     privileged: true
     environment:
       DOCKER_TLS_CERTDIR: ''
@@ -29,12 +30,13 @@ services:
     depends_on:
     - postgres_db
     - sandbox_engine
-    restart: unless-stopped
+    restart: on-failure
     env_file:
     - ./Agents/LUMI/.env
     environment:
     - AGENT_NAME=LUMI
     - DOCKER_HOST=tcp://sandbox_engine:2375
+    - TZ=HOST-3
     networks:
       default:
         aliases:
@@ -51,12 +53,13 @@ services:
     depends_on:
     - postgres_db
     - sandbox_engine
-    restart: unless-stopped
+    restart: on-failure
     env_file:
     - ./Agents/VEGA/.env
     environment:
     - AGENT_NAME=VEGA
     - DOCKER_HOST=tcp://sandbox_engine:2375
+    - TZ=HOST-3
     networks:
       default:
         aliases:

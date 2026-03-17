@@ -10,7 +10,6 @@ from src.layer01_datastate.vector_db.vector_db import setup_vector_db
 from src.layer01_datastate.graph_db.graph_db import setup_graph_db
 from src.layer01_datastate.global_state.global_state_monitoring import global_state_monitoring
 
-from src.layer02_sensors.pc.pc_monitoring import pc_monitoring
 from src.layer02_sensors.telegram.tg_manager import setup_telegram
 from src.layer02_sensors.sandbox_listener import start_sandbox_listener
 
@@ -42,7 +41,6 @@ class Gateway:
     # LAYER 2: SENSORS
     async def setup_sensors(self) -> None:
         """Запускает мониторинг PC и Telegram"""
-        self.tasks.append(asyncio.create_task(pc_monitoring.run_loop()))
         self.tasks.append(asyncio.create_task(setup_telegram()))
         self.tasks.append(asyncio.create_task(start_sandbox_listener()))
 

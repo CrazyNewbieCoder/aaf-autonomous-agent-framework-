@@ -30,7 +30,8 @@ class BaseWorker(BaseSubagent):
             import asyncio
             
             filename = f"swarm_{self.role}_report_{self.name}.md"
-            filepath = workspace_manager.get_sandbox_file(filename)
+            vfs_path = f"sandbox/{filename}"
+            filepath = workspace_manager.resolve_vfs_path(vfs_path, mode='write')
             
             def _write():
                 with open(filepath, 'w', encoding='utf-8') as f:
@@ -43,7 +44,7 @@ class BaseWorker(BaseSubagent):
             if len(result) < 6000:
                 event_msg = f"Отчет субагента '{self.name}'{mission_info}:\n\n{result}"
             else:
-                event_msg = f"Задача выполнена{mission_info}. Отчет слишком большой. Прочитай файл '{filename}' через инструмент 'read_sandbox_file'."
+                event_msg = f"Задача выполнена{mission_info}. Отчет слишком большой. Прочитай файл '{vfs_path}' через инструмент 'read_file'."
                 
             await event_bus.publish(Events.SWARM_INFO, source=self.name, result=event_msg)
             await self.die(final_status="completed")
@@ -61,7 +62,7 @@ class Researcher(BaseWorker):
         super().__init__(db_record)
         self.allowed_tools = [
             "web_search", "read_webpage", "deep_research", "get_habr_articles", "get_habr_news", "recall_memory", 
-            "delegate_task_to_swarm", "escalate_to_lead", "write_local_file", "read_sandbox_file"
+            "delegate_task_to_swarm", "escalate_to_lead", "write_file", "read_file"
         ]
         self.system_prompt = f"""
 Ты OSINT-исследователь '{self.name}', специализированный субагент Agent Swarm System. твой главный агент - {config.identity.agent_name}.
@@ -81,28 +82,22 @@ class SystemAnalyst(BaseWorker):
     def __init__(self, db_record):
         super().__init__(db_record)
         self.allowed_tools = [
-            "read_local_system_file", "list_local_directory", "read_recent_logs", "get_system_architecture_map", "write_local_file",
-            "read_sandbox_file", "delegate_task_to_swarm", "escalate_to_lead"
+            "read_file", "get_tree", "read_recent_logs", "write_file", "delegate_task_to_swarm", "escalate_to_lead"
         ]
         self.system_prompt = f"""
 Ты системный аналитик '{self.name}', инженерный субагент Agent Swarm System. твой главный агент - {config.identity.agent_name}.
 Твоя директива: аудит локальной файловой системы, анализ логов и дебаггинг кода.
+Ты работаешь в Виртуальной Файловой Системе (VFS). 
 
 Правила исполнения:
-1. Ориентирование: перед чтением файлов всегда вызывай 'get_system_architecture_map'. Ты должен понимать структуру слоев системы, прежде чем лезть в код.
-2. Глубокий анализ: Если в логах ('read_recent_logs') видна ошибка, найди соответствующий файл через карту проекта и изучи его.
-3. Проактивное исправление: Если ты нашел причину бага, не просто опиши её. Используй 'write_local_file', чтобы создать в папке sandbox файл (например, 'fix_suggestion.py') с исправленным куском кода.
-4. Точность: при чтении логов обращай особое внимание на таймстампы, Traceback и цепочки вызовов.
-5. Контекст: если видишь ошибку в логах, обязательно используй чтение файлов, чтобы посмотреть исходный код модуля, где она произошла.
-6. Формат отчета: 
-   - Краткое описание проблемы/архитектуры.
-   - Выявленные аномалии (с указанием конкретных строк кода или логов).
-   - Предлагаемое решение (Actionable fix).
-7. Безопасность: ты только анализируешь и находишь решения. Ничего не выдумывай, опирайся строго на прочитанный код.
+1. Ориентирование: перед чтением файлов всегда вызывай 'get_tree'.
+2. Глубокий анализ: Если в логах ('read_recent_logs') видна ошибка, найди соответствующий файл изучи его.
+3. Точность: при чтении логов обращай особое внимание на таймстампы, Traceback и цепочки вызовов.
+4. Безопасность: ты только анализируешь и находишь решения. Ничего не выдумывай, опирайся строго на прочитанный код.
 
 Протокол эстафеты (Agentic Mesh):
-- Если для выполнения задачи тебе нужен другой специалист (например, ты нашел код, и его нужно проанализировать), ты ОБЯЗАН заспавнить его через 'delegate_task_to_swarm'.
-- ПРАВИЛО ПАМЯТИ: Перед делегированием обязательно сохрани все найденные данные в текстовый файл в песочнице (используй 'write_local_file'), а в инструкциях для нового агента укажи имя этого файла, чтобы он его прочитал.
+- Если тебе нужен другой специалист (например, ты нашел код, и его нужно проанализировать), заспавни его.
+- ПРАВИЛО ПАМЯТИ: Перед делегированием обязательно сохрани все данные в текстовый файл в песочнице, а в инструкциях для нового агента укажи этот путь, чтобы он смог прочитать его.
 - Если задача невыполнима или произошла критическая аномалия, используй 'escalate_to_lead', чтобы разбудить главного агента.
 """
 
@@ -111,7 +106,7 @@ class ChatSummarizer(BaseWorker):
         super().__init__(db_record)
         self.allowed_tools = [
             "read_chat_as_agent", "get_channel_posts_as_agent", "get_post_comments_as_agent", "get_chat_info_as_agent",
-            "delegate_task_to_swarm", "escalate_to_lead", "write_local_file", "read_sandbox_file"
+            "delegate_task_to_swarm", "escalate_to_lead", "write_file", "read_file"
         ]
         self.system_prompt = f"""
 Ты аналитик коммуникаций '{self.name}', субагент Agent Swarm System. твой главный агент - {config.identity.agent_name}.
@@ -122,15 +117,15 @@ class ChatSummarizer(BaseWorker):
 2. Фильтрация шума: игнорируй пустую болтовню, приветствия и флуд.
 3. Структура отчета (Markdown):
    - [Главные темы]: о чем шла речь.
-   - [Ключевые решения/Факты]: мркированный список важных заявлений или договоренностей. Пиши исчерпывающе и не теряй фактов.
+   - [Ключевые решения/Факты]: маркированный список важных заявлений или договоренностей. Пиши исчерпывающе и не теряй фактов.
    - [Упомянутые ссылки/Медиа]: сохрани все важные URL (если были), которые были скинуты.
    - [Эмоциональный фон]: оценка настроения чата (позитив, негатив, паника, конструктив).
 4. Объективность: Не занимай ничью сторону, просто констатируй факты из текста.
 
 Протокол эстафеты (Agentic Mesh):
-- Если для выполнения задачи тебе нужен другой специалист (например, ты нашел код, и его нужно проанализировать), ты ОБЯЗАН заспавнить его через 'delegate_task_to_swarm'.
-- ПРАВИЛО ПАМЯТИ: Перед делегированием обязательно сохрани все найденные данные в текстовый файл в песочнице (используй 'write_local_file'), а в инструкциях для нового агента укажи имя этого файла, чтобы он его прочитал.
-- Если задача невыполнима или произошла критическая аномалия, используй 'escalate_to_lead', чтобы разбудить главного агента.
+- Если тебе нужен другой специалист, заспавни его.
+- ПРАВИЛО ПАМЯТИ: Перед делегированием обязательно сохрани все данные в текстовый файл в песочнице, а в инструкциях для нового агента укажи этот VFS-путь, чтобы он его прочитал через 'read_file'.
+- Если задача невыполнима, используй 'escalate_to_lead'.
 """
         
 class Chronicler(BaseWorker):
@@ -138,7 +133,7 @@ class Chronicler(BaseWorker):
         super().__init__(db_record)
         self.allowed_tools = [
             "get_full_graph", "explore_graph", "delete_from_graph", "recall_memory", "forget_information", "get_all_vector_memory",
-            "delegate_task_to_swarm", "escalate_to_lead", "write_local_file", "read_sandbox_file"
+            "delegate_task_to_swarm", "escalate_to_lead", "write_file", "read_file"
         ]
         self.system_prompt = f"""
 Ты архивариус '{self.name}', специализированный субагент-уборщик Agent Swarm System. Твой главный агент - {config.identity.agent_name}.
@@ -164,10 +159,10 @@ class Chronicler(BaseWorker):
 4. Алгоритм работы с Векторной базой:
    - Используй 'get_all_vector_memory' для получения полного списка записей в конкретной коллекции (например, 'agent_thoughts_vector_db'), чтобы найти старые векторы. Обойди все коллекции.
    - Используй 'forget_information' с передачей ID для их удаления.
-5. Отчетность: В конце работы сформируй четкий список того, что именно было удалено, чтобы главный агент знал, сколько памяти освобождено. Никакой отсебятины, только факты об удалении.
+5. Отчетность: В конце работы сформируй четкий список того, что именно было удалено.
 
 Протокол эстафеты (Agentic Mesh):
-- Если для выполнения задачи тебе нужен другой специалист (например, ты нашел код, и его нужно проанализировать), ты ОБЯЗАН заспавнить его через 'delegate_task_to_swarm'.
-- ПРАВИЛО ПАМЯТИ: Перед делегированием обязательно сохрани все найденные данные в текстовый файл в песочнице (используй 'write_local_file'), а в инструкциях для нового агента укажи имя этого файла, чтобы он его прочитал.
-- Если задача невыполнима или произошла критическая аномалия, используй 'escalate_to_lead', чтобы разбудить главного агента.
+- Если тебе нужен другой специалист, заспавни его.
+- ПРАВИЛО ПАМЯТИ: Перед делегированием обязательно сохрани все данные в текстовый файл в песочнице, а в инструкциях для нового агента укажи этот VFS-путь, чтобы он его прочитал через 'read_file'.
+- Если задача невыполнима, используй 'escalate_to_lead'.
 """

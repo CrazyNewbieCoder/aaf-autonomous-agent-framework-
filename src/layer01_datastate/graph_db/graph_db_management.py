@@ -267,13 +267,13 @@ async def get_graph_rag_data(node_names: list) -> tuple[str, list]:
             resolved_name = _resolve_entity(name, threshold=85)
             
             # --- DEPTH 1 --- 
-            # Ставим с запасом LIMIT 20 на один якорь, чтобы собрать широкий пул
+            # Ставим с запасом LIMIT на один якорь, чтобы собрать широкий пул
             query_d1 = """
             MATCH (a:Concept {name: $name})-[r:Link]-(b:Concept)
             RETURN a.name AS src, r.base_type AS rel, b.name AS tgt, r.context AS ctx, 
                    r.confidence_score AS conf, r.bond_weight AS weight, r.updated_at as time
             ORDER BY (r.confidence_score * r.bond_weight) DESC, r.updated_at DESC
-            LIMIT 20
+            LIMIT 40
             """
             df_d1 = graph_db.conn.execute(query_d1, {"name": resolved_name}).get_as_df()
             
@@ -299,7 +299,7 @@ async def get_graph_rag_data(node_names: list) -> tuple[str, list]:
             RETURN b.name AS bridge, r2.base_type AS rel, c.name AS target, r2.context AS ctx, 
                    r2.confidence_score AS conf, r2.bond_weight AS weight, r2.updated_at as time
             ORDER BY (r2.confidence_score * r2.bond_weight) DESC, r2.updated_at DESC
-            LIMIT 15
+            LIMIT 30
             """
             df_d2 = graph_db.conn.execute(query_d2, {"name": resolved_name, "supernodes": supernodes_list}).get_as_df()
             

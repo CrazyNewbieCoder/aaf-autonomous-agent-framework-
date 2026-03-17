@@ -15,7 +15,7 @@ from src.layer02_sensors.telegram.shared_tools.history import (
     tg_get_post_comments, tg_get_unread_chats_summary, tg_search_chat_messages, tg_mark_as_read
 )
 from src.layer02_sensors.telegram.shared_tools.media import (
-    tg_get_media, tg_send_voice_message, tg_send_file, tg_download_file, 
+    tg_get_media, tg_send_file, tg_download_file, 
     tg_send_sticker, tg_save_sticker_set
 )
 from src.layer02_sensors.telegram.shared_tools.management import (
@@ -370,19 +370,6 @@ async def get_channel_subscribers_as_agent(chat_id: str, limit: int = 50) -> str
 )
 async def check_user_in_chat_as_agent(chat_id: str, query: str) -> str:
     return await tg_check_user_in_chat(agent_client, chat_id, query)
-
-@llm_skill(
-    description="Генерирует аудио из текста и отправляет как голосовое сообщение.",
-    parameters={
-        "chat_id": "ID чата или @username.",
-        "text": "Текст для озвучки и отправки."
-    }
-)
-async def send_voice_message_as_agent(chat_id: str, text: str) -> str:
-    result = await tg_send_voice_message(agent_client, chat_id, text)
-    chat_source = _format_chat_source(chat_id)
-    await create_dialogue_entry(actor=config.identity.agent_name, message=f"[Голосовое сообщение]: {text}", source=chat_source)
-    return result
 
 @llm_skill(
     description="Скачивает медиа (фото, гс, кружок, стикер) из сообщения и возвращает его текстовое описание (Vision/Audio).",

@@ -112,6 +112,7 @@ class BrainEngine:
 
     # ---------------------------------------------------------
     # ОРКЕСТРАТОР
+    
     async def run_worker_loop(self):
         """Цикл, следящий за очередью выполнения задач"""
         system_logger.info("[BrainEngine] Центральный цикл мозга запущен.")
@@ -119,11 +120,16 @@ class BrainEngine:
         await event_bus.publish(Events.SYSTEM_MODULE_HEARTBEAT, module_name=event_driven_module, status="ON")
         await event_bus.publish(Events.SYSTEM_MODULE_HEARTBEAT, module_name=proactivity_module, status="ON")
         await event_bus.publish(Events.SYSTEM_MODULE_HEARTBEAT, module_name=thoughts_module, status="ON")
-
-        brain_state["status"] = "thinking"
         
         while True:
-            task = await self.queue.get()
+            # Перед получением задачи мозг всегда sleeping
+            brain_state["status"] = "sleeping"
+
+            task = await self.queue.get() # Ожидаем задач
+
+            # Как только задача получена - ставим thinking
+            brain_state["status"] = "thinking"
+
             system_logger.info(f"[BrainEngine] Выполнение задачи: {task.task_type} (Priority: {task.priority})")
 
             try:

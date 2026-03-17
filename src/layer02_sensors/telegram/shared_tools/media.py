@@ -10,7 +10,6 @@ from src.layer00_utils.watchdog.watchdog import userbot_telethon_module
 from src.layer00_utils.workspace import workspace_manager
 from src.layer00_utils.audio_tools import process_audio_for_llm
 from src.layer00_utils.image_tools import compress_and_encode_image
-from src.layer02_sensors.pc.voice.tts import tts
 from src.layer03_brain.llm.multimodality import describe_image_with_vision_model, transcribe_audio_with_model
 from src.layer02_sensors.telegram.shared_tools._helpers import clean_peer_id
 
@@ -64,19 +63,6 @@ async def tg_get_media(client: TelegramClient, chat_id: str | int, message_id: i
     except Exception as e:
         system_logger.error(f"[Telegram Tools] Ошибка получения медиа из {chat_id}: {e}")
         return f"Ошибка при получении медиа: {e}"
-
-@watchdog_decorator(userbot_telethon_module)
-async def tg_send_voice_message(client: TelegramClient, chat_id: str | int, text: str) -> str:
-    """Генерирует аудио и отправляет как голосовое сообщение"""
-    chat_id = clean_peer_id(chat_id)
-    try:
-        audio_path = await tts.generate_audio_file(text)
-        msg = await client.send_file(chat_id, file=audio_path, voice_note=True)
-        await client.send_read_acknowledge(chat_id, clear_mentions=True)
-        return f"Голосовое сообщение успешно сгенерировано и отправлено. ID: {msg.id}"
-    except Exception as e:
-        system_logger.error(f"[Telegram Tools] Ошибка отправки ГС в {chat_id}: {e}")
-        return f"Ошибка при отправке голосового сообщения: {e}"
 
 @watchdog_decorator(userbot_telethon_module)
 async def tg_send_file(client: TelegramClient, chat_id: str | int, file_path: str, caption: str = "") -> str:

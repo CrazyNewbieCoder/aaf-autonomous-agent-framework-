@@ -84,27 +84,19 @@ class ContextBuilder:
         args = args or ()
         details = []
         
-        if event.name in ["AGENT_NEW_INCOMING_MESSAGE_TG"]:
+        if event.name == "AGENT_NEW_INCOMING_MESSAGE_TG":
             username = kwargs.get("username", "Unknown")
             text = kwargs.get("text", "")
             msg_id = kwargs.get("message_id", "Неизвестно")
             details.append(f"[От: @{username} в Telegram] (ID сообщения: {msg_id}): {text}")
             
-        elif event.name in["AGENT_NEW_MENTION_TG"]:
+        elif event.name == "AGENT_NEW_MENTION_TG":
             chat = kwargs.get("chat_title", "Unknown Chat")
             chat_id = kwargs.get("chat_id", "Неизвестно") 
             username = kwargs.get("username", "Unknown")
             text = kwargs.get("text", "")
             msg_id = kwargs.get("message_id", "Неизвестно")
             details.append(f"[Telegram-упоминание в группе '{chat}' (ID чата: {chat_id}) от @{username}] (ID сообщения: {msg_id}): {text}")
-            
-        elif event.name == "TEXT_QUERY":
-            query = args[0] if args else kwargs.get("command", "")
-            details.append(f"[Терминал основного ПК]: {query}")
-            
-        elif event.name == "VOICE_QUERY":
-            query = args[0] if args else kwargs.get("query", "")
-            details.append(f"[Голосовой запрос с основного ПК]: {query}")
 
         elif event.name == "SWARM_INFO":
             source = kwargs.get("source", "Неизвестный субагент")
@@ -152,8 +144,6 @@ class ContextBuilder:
         
         if event.name in["AGENT_NEW_INCOMING_MESSAGE_TG", "USER_NEW_INCOMING_MESSAGE_TG", "AGENT_NEW_MENTION_TG"]:
             return kwargs.get("text", event.description)
-        elif event.name in ["TEXT_QUERY", "VOICE_QUERY"]:
-            return args[0] if args else kwargs.get("command", event.description)
         else:
             return event.description
 

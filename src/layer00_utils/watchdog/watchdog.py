@@ -10,7 +10,6 @@ SYSTEM_MODULE_ERROR = Events.SYSTEM_MODULE_ERROR
 sql_db_module = "SQL DB"
 vector_db_module = "Vector DB"
 global_state_monitoring_module = "Global State Monitoring"
-stt_module = "STT"
 userbot_telethon_module = "Telegram Userbot"
 events_monitoring_module = "Events Monitoring"
 event_driven_module = "[ReAct] EventDriven"
@@ -20,7 +19,7 @@ graph_db_module = "Graph DB"
 
 ALL_SYSTEM_MODULES = [
     sql_db_module, vector_db_module, graph_db_module,
-    global_state_monitoring_module, stt_module, userbot_telethon_module,
+    global_state_monitoring_module, userbot_telethon_module,
     events_monitoring_module, event_driven_module, proactivity_module, thoughts_module
 ]
 
