@@ -66,10 +66,14 @@ class WorkspaceManager:
 
         # 4. Тюрьма для Write/Delete
         if mode in ['write', 'delete']:
+            # Защита бедного agent_sdk.py
+            if target_path.name == "agent_sdk.py":
+                raise PermissionError("Security: Системный файл 'agent_sdk.py' аппаратно защищен от изменения, перемещения и удаления.")
+                
             try:
                 target_path.relative_to(self.sandbox_dir.resolve())
             except ValueError:
-                raise PermissionError(f"Security: Операция '{mode}' разрешена ТОЛЬКО внутри твоей песочницы (sandbox/). Доступ к '{target_path.as_posix()}' отклонен.")
+                raise PermissionError(f"Security: Операция '{mode}' разрешена только внутри твоей песочницы (sandbox/). Доступ к '{target_path.as_posix()}' отклонен.")
 
         return target_path
 

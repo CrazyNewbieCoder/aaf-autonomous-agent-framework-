@@ -8,6 +8,7 @@ from src.layer00_utils.config_manager import config
 from src.layer00_utils.watchdog.watchdog import watchdog
 from src.layer00_utils.workspace import workspace_manager
 from src.layer00_utils.logger import system_logger
+from src.layer00_utils.sandbox_env.deployments import get_active_deployments_status
 
 from src.layer01_datastate.event_bus.events import EventConfig
 from src.layer01_datastate.memory_manager import memory_manager
@@ -117,9 +118,10 @@ class ContextBuilder:
             alert_msg = kwargs.get("alert_message", "Без текста")
             details.append(f"[Уведомление от локального скрипта]: {alert_msg}")
 
-        elif event.name == "EXTERNAL_WEBHOOK_RECEIVED":
-            payload = kwargs.get("payload", "Пустые данные")
-            details.append(f"[Внешний Webhook (POST-запрос)]: \n{payload}\n")
+        elif event.name == "DEPLOYMENT_CRASHED":
+            project = kwargs.get("project", "Unknown")
+            status = kwargs.get("status", "Unknown")
+            details.append(f"Микросервис '{project}' упал. Статус: {status}.")
             
         else:
             if args: 
@@ -201,6 +203,7 @@ class ContextBuilder:
         tasks = {
             "global_state": global_state_monitoring.get_global_state(),
             "mental_state": get_all_mental_states(),
+            "active_deployments": get_active_deployments_status(),
 
             "recent_thoughts": memory_manager.get_formatted_thoughts(limit=limits.thoughts_limit),
             "recent_actions": get_recent_agent_actions(limit=limits.actions_limit),
@@ -256,6 +259,7 @@ class ContextBuilder:
         from src.layer03_brain.llm.client import key_manager
 
         system_architecture = context.get('macro_arch')
+        active_deployments = context.get('active_deployments', 'Нет запущенных микросервисов.')
         system_health = context.get('system_health')
         mental_state = context.get('mental_state')
         global_state = context.get('global_state')
@@ -272,13 +276,16 @@ class ContextBuilder:
 
         # Базовые блоки, которые есть у всех
         parts = f"""
-## SYSTEM ARCHITECTURE (твоя система, макро-уровень)
+## SYSTEM ARCHITECTURE (система AAF, макро-уровень)
 {system_architecture}
+
+## ACTIVE DEPLOYMENTS (микросервисы)
+{active_deployments}
 
 ## SYSTEM HEALTH (Отчет Watchdog) 
 {system_health}
 
-## SYSTEM SETTINGS (Текущие настройки твоей системы)
+## SYSTEM SETTINGS (текущие настройки системы AAF)
 - LLM-модель (твое ядро): {config.llm.model_name}
 - Состояние API: {key_manager.get_api_status_string()}
 - Температура: {config.llm.temperature}
@@ -286,25 +293,25 @@ class ContextBuilder:
 - Интервал проактивности: {brain_engine.proactivity_interval} сек.
 - Интервал интроспекции: {brain_engine.thoughts_interval} сек.
 
-## MENTAL STATE (Твоя картина мира) 
+## MENTAL STATE (картина мира) 
 {mental_state}
 
 ## GLOBAL STATE 
 {global_state}
 
-## RECENT AGENT THOUGHTS (Твои последние мысли)
+## RECENT AGENT THOUGHTS (последние мысли)
 {recent_thoughts}
 
-## RECENT AGENT ACTIONS (Твои недавние действия)
+## RECENT AGENT ACTIONS (недавние действия)
 {recent_actions}
 
-## GLOBAL DIALOGUE HISTORY (Внешняя среда)
+## GLOBAL DIALOGUE HISTORY (внешняя среда)
 {recent_dialogues}
 
-## UNREAD TELEGRAM MESSAGES (Непрочитанные сообщения)
+## UNREAD TELEGRAM MESSAGES (непрочитанные сообщения)
 {unread_tg}
 
-## SANDBOX FILES (Текущие файлы в песочнице) 
+## SANDBOX FILES (текущие файлы в Sandbox) 
 {sandbox_files}
 
 ## BACKGROUND EVENTS (фоновые события) 
@@ -313,7 +320,7 @@ class ContextBuilder:
 ## ACTIVE SWARM PROCESSES (субагенты) 
 {swarm_status}
 
-## LONG-TERM TASKS (Долгосрочные задачи) 
+## LONG-TERM TASKS (долгосрочные задачи) 
 {tasks}
 """
         

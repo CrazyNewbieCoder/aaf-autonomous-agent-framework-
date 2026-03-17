@@ -25,6 +25,6 @@ async def start_sandbox_listener():
     runner = web.AppRunner(app)
     await runner.setup()
     # Слушаем только локалхост, чтобы извне никто не мог дергать агента
-    site = web.TCPSite(runner, '127.0.0.1', 18790)
+    site = web.TCPSite(runner, '0.0.0.0', 18790) # Слушаем внутренную сеть Docker Compose
     await site.start()
     system_logger.info("[Sandbox Listener] Сервер приема уведомлений от локальных скриптов Sandbox запущен на порту 18790.")
