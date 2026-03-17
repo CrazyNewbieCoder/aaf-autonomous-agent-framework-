@@ -4,8 +4,10 @@ import asyncio
 from src.layer00_utils.logger import system_logger
 from src.layer00_utils.workspace import workspace_manager
 from src.layer00_utils.env_manager import AGENT_NAME # Единый менеджер
+from src.layer00_utils.config_manager import config
 
-MAX_OUTPUT_LENGTH = 80000 
+# Динамически читаем лимит
+MAX_OUTPUT_LENGTH = config.llm.limits.max_file_read_chars 
 
 def _truncate_output(text: str) -> str:
     if not text:

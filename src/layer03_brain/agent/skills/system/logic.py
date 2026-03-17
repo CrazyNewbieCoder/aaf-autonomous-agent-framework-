@@ -78,18 +78,17 @@ async def read_recent_logs(lines: int = 50) -> str:
         return f"Ошибка при чтении логов: {e}"
     
 
-@llm_skill(description="Инициирует корректное завершение работы всего твоего системного ядра (Docker-контейнера).")
+@llm_skill(description="Инициирует корректное завершение работы всей системы AAF.")
 async def shutdown_system() -> str:
     import os
-    import signal
     from src.layer01_datastate.event_bus.event_bus import event_bus
     from src.layer01_datastate.event_bus.events import Events
     
     system_logger.warning("[System] Агент инициировал завершение работы системы.")
     await event_bus.publish(Events.STOP_SYSTEM)
     await asyncio.sleep(5)
-    os.kill(os.getpid(), signal.SIGTERM)
-    return "Сигнал на завершение работы отправлен. Базы сохранены, система отключается..."
+    os._exit(0) # Мгновенное убийство контейнера (жестоко, но что поделать)
+    return "Система отключена."
 
 
 @llm_skill(

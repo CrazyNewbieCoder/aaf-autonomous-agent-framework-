@@ -31,7 +31,6 @@ async def _execute_tool(subagent, tool_call):
         except Exception:
             return {"role": "tool", "tool_call_id": tool_call.id, "name": func_name, "content": f"JSONDecodeError: Ошибка парсера: {original_error}"}
 
-    # 2. ПРАВИЛЬНАЯ РАСПАКОВКА по новой L2-схеме
     skill_uri = raw_args.get("skill_uri")
     args = raw_args.get("kwargs", {})
 

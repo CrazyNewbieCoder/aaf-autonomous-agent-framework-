@@ -12,6 +12,7 @@ class IdentityConfig(BaseModel):
 class LimitsConfig(BaseModel):
     max_file_read_chars: int
     max_web_read_chars: int
+    action_details_max_chars: int
     image_max_size: Tuple[int, int]
 
 class ContextDepthItem(BaseModel):
@@ -59,11 +60,27 @@ class SwarmConfig(BaseModel):
     sybagent_model: str
     max_sybagent_steps: int
 
+class GraphRagConfig(BaseModel):
+    max_direct_edges: int
+    max_indirect_edges: int
+
+class VectorRagConfig(BaseModel):
+    max_results: int
+
+class MentalStateConfig(BaseModel):
+    active_focus_ttl_hours: int
+
 class MemoryConfig(BaseModel):
+    mental_state: MentalStateConfig
+
     chroma_db_path: str
-    kuzu_db_path: str
     similarity_threshold: float
     embedding_model: EmbeddingModelConfig
+    vector_rag: VectorRagConfig
+
+    kuzu_db_path: str
+    graph_rag: GraphRagConfig
+
     workspace_garbage_collector: GarbageCollectorConfig
 
 class VoiceConfig(BaseModel):

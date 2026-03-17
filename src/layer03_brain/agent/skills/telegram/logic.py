@@ -39,7 +39,7 @@ from src.layer02_sensors.telegram.shared_tools.interact import (
 def _format_chat_source(chat_id: str | int, topic_id: int = None) -> str:
     """Вспомогательная функция: очищает ID и формирует тег источника для БД"""
     clean_id = str(chat_id).replace('@', '')
-    topic_str = f" [Топик ID: {topic_id}]" if topic_id else ""
+    topic_str = f"[Топик ID: {topic_id}]" if topic_id else ""
     if clean_id.startswith('-'):
         return f"tg_agent_group_({clean_id}){topic_str}"
     return f"tg_agent_chat_({clean_id}){topic_str}"

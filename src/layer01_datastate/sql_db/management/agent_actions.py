@@ -4,6 +4,7 @@ from src.layer01_datastate.sql_db.sql_models import AgentAction
 from src.layer00_utils.logger import system_logger
 from src.layer00_utils.watchdog.watchdog_decorator import watchdog_decorator
 from src.layer00_utils.watchdog.watchdog import sql_db_module
+from src.layer00_utils.config_manager import config
 
 
 # ----------------------------------------------------------------------------------------------
@@ -49,10 +50,10 @@ async def get_recent_agent_actions(limit: int = 15) -> str:
                 time_str = a.created_at.strftime('%Y-%m-%d %H:%M:%S') 
                 
                 # Обрезаем детали, чтобы не засорять контекст LLM
-                limit = 200
+                limit_chars = config.llm.limits.action_details_max_chars
                 details_str = str(a.details)
-                if len(details_str) > limit:
-                    details_str = details_str[:limit] + "... [Обрезано]"
+                if len(details_str) > limit_chars:
+                    details_str = details_str[:limit_chars] + "... [Обрезано]"
                     
                 formatted_actions.append(f"[{time_str}] | Type: {a.action_type} | Details: {details_str}")
             

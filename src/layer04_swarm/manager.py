@@ -68,10 +68,9 @@ class SwarmManager:
         if name not in self.active_processes:
             return f"Ошибка: Субагент '{name}' не найден среди активных."
         
-        obj = self.active_processes[name]["obj"]
+        # Просто отменяем задачу. Исключение CancelledError внутри 
+        # самого субагента (в models/workers.py) корректно вызовет self.die("killed")
         self.active_processes[name]["task"].cancel()
-        
-        await obj.die(final_status="killed_by_admin")
         del self.active_processes[name]
         
         msg = f"Субагент '{name}' был принудительно терминирован."

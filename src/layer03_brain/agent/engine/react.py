@@ -103,9 +103,16 @@ async def _execute_single_tool(tool_call) -> dict:
             error_msg = f"JSONDecodeError: Ошибка парсера: {original_error}"
             return {"role": "tool", "tool_call_id": tool_call.id, "name": func_name, "content": error_msg}
 
-    # ИЗМЕНЕНИЕ: Извлекаем URI и kwargs по новой схеме
     skill_uri = raw_args.get("skill_uri")
     args = raw_args.get("kwargs", {})
+
+    # 1. Если модель сделала двойное вложение {"kwargs": {"kwargs": {"query": "..."}}}
+    if isinstance(args, dict) and "kwargs" in args and isinstance(args["kwargs"], dict):
+        args = args["kwargs"]
+        
+    # 2. Если модель засунула аргументы в корень JSON, проигнорировав объект 'kwargs'
+    elif not args and len(raw_args) > 1:
+        args = {k: v for k, v in raw_args.items() if k not in ["skill_uri", "kwargs"]}
 
     if not skill_uri:
         return {"role": "tool", "tool_call_id": tool_call.id, "name": func_name, "content": "System Error: Отсутствует 'skill_uri'."}

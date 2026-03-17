@@ -42,7 +42,7 @@ class PromptManager:
 
         # Группируем навыки по категориям (memory, telegram, system и т.д.)
         for category, skills in l0_manifest.items():
-            lines.append(f"### [{category}]")
+            lines.append(f"### [{category.upper()}]")
             for skill in skills:
                 lines.append(skill)
             lines.append("") # Пустая строка для читаемости

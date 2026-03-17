@@ -38,24 +38,21 @@ def _resolve_entity(entity_name: str, threshold: int = 85) -> str:
             return best_name
             
     return entity_name
-
 @watchdog_decorator(graph_db_module)
-async def manage_graph(source: str, target: str, base_type: str, context: str = "[Нет контекста]") -> str:
-    """Связывает два узла. Автоматически создает их, если они не существуют, и обновляет время."""
+async def manage_graph(source: str, target: str, base_type: str, context: str = "[Нет контекста]", confidence_score: float = 1.0, bond_weight: float = 1.0) -> str:
     def _sync_manage():
         src_resolved = _resolve_entity(source)
         tgt_resolved = _resolve_entity(target)
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        # MERGE узлов, затем MERGE связи (чтобы можно было обновлять context и время)
         query = """
         MERGE (s:Concept {name: $src_name})
         ON CREATE SET s.type = 'Unknown'
         MERGE (t:Concept {name: $tgt_name})
         ON CREATE SET t.type = 'Unknown'
         MERGE (s)-[r:Link {base_type: $rel_type}]->(t)
-        ON CREATE SET r.context = $ctx, r.updated_at = $time
-        ON MATCH SET r.context = $ctx, r.updated_at = $time
+        ON CREATE SET r.context = $ctx, r.updated_at = $time, r.confidence_score = $conf, r.bond_weight = $weight
+        ON MATCH SET r.context = $ctx, r.updated_at = $time, r.confidence_score = $conf, r.bond_weight = $weight
         """
         
         parameters = {
@@ -63,12 +60,14 @@ async def manage_graph(source: str, target: str, base_type: str, context: str = 
             "tgt_name": tgt_resolved,
             "rel_type": base_type,
             "ctx": context,
-            "time": now_str
+            "time": now_str,
+            "conf": float(confidence_score),
+            "weight": float(bond_weight)
         }
         
         graph_db.conn.execute(query, parameters)
         
-        msg = f"Граф обновлен: ({src_resolved}) - [{base_type}] -> ({tgt_resolved})"
+        msg = f"Граф обновлен: ({src_resolved}) - [{base_type}] -> ({tgt_resolved}) [Conf: {confidence_score}]"
         system_logger.info(f"[Graph DB] {msg}")
         return msg
 
@@ -151,7 +150,7 @@ async def get_full_graph() -> str:
         if df.empty:
             return "Граф пуст. Связей нет."
             
-        lines = ["--- ПОЛНЫЙ ДАМП ГРАФОВОЙ БАЗЫ ДАННЫХ ---"]
+        lines = ["--- Содержимое графовой базы данных ---"]
         for _, row in df.iterrows():
             lines.append(f"({row['src']}) - [{row['rel']}] -> ({row['tgt']}) | Контекст: {row['ctx']}")
             
@@ -250,54 +249,94 @@ async def get_all_node_names_async() -> list:
 async def get_graph_rag_data(node_names: list) -> tuple[str, list]:
     """
     Выполняет поиск Depth 1 и Depth 2 (Интуиция). 
-    Возвращает отформатированный текст для LLM и список имен соседей для Вектора.
+    Собирает глобальный пул, сортирует по Релевантности и Свежести, 
+    и только потом обрезает до лимитов из конфига.
     """
     def _sync_get():
         if not graph_db.conn or not node_names:
-            return "Нет релевантных связей в графе.", []
+            return "Нет релевантных связей в графе.",[]
         
-        direct_lines = []
-        indirect_lines = []
+        direct_pool = {}   # Используем dict для дедупликации по сигнатуре
+        indirect_pool = {}
         associated_nodes = set()
+        
+        limit_direct = config.memory.graph_rag.max_direct_edges
+        limit_indirect = config.memory.graph_rag.max_indirect_edges
         
         for name in node_names:
             resolved_name = _resolve_entity(name, threshold=85)
             
-            # --- DEPTH 1 (Прямые связи) ---
+            # --- DEPTH 1 --- 
+            # Ставим с запасом LIMIT 20 на один якорь, чтобы собрать широкий пул
             query_d1 = """
             MATCH (a:Concept {name: $name})-[r:Link]-(b:Concept)
-            RETURN a.name AS src, r.base_type AS rel, b.name AS tgt, r.context AS ctx
-            LIMIT 5
+            RETURN a.name AS src, r.base_type AS rel, b.name AS tgt, r.context AS ctx, 
+                   r.confidence_score AS conf, r.bond_weight AS weight, r.updated_at as time
+            ORDER BY (r.confidence_score * r.bond_weight) DESC, r.updated_at DESC
+            LIMIT 20
             """
             df_d1 = graph_db.conn.execute(query_d1, {"name": resolved_name}).get_as_df()
             
             if not df_d1.empty:
                 for _, row in df_d1.iterrows():
-                    direct_lines.append(f"- ({row['src']}) - [{row['rel']}] - ({row['tgt']}) | Контекст: {row['ctx']}")
-                    associated_nodes.add(row['tgt'])
-                    
-            # --- DEPTH 2 (Косвенные ассоциации с защитой от Суперузлов) ---
+                    sig = f"{row['src']}-{row['rel']}-{row['tgt']}"
+                    score = round(row['conf'] * row['weight'], 2)
+                    # Если такой связи еще нет, или мы нашли более свежую её версию
+                    if sig not in direct_pool or direct_pool[sig]['time'] < row['time']:
+                        direct_pool[sig] = {
+                            "text": f"- ({row['src']}) - [{row['rel']}] - ({row['tgt']}) | Контекст: {row['ctx']} [Relevance: {score}]",
+                            "score": score,
+                            "time": row['time'],
+                            "tgt": row['tgt']
+                        }
+
+            # --- DEPTH 2 ---
             query_d2 = """
             MATCH (a:Concept {name: $name})-[r1:Link]-(b:Concept)-[r2:Link]-(c:Concept)
             WHERE a.name <> c.name 
               AND NOT b.name IN $supernodes
               AND NOT c.name IN $supernodes
-            RETURN a.name AS start, b.name AS bridge, c.name AS target, r2.base_type AS rel, r2.context AS ctx
-            LIMIT 3
+            RETURN b.name AS bridge, r2.base_type AS rel, c.name AS target, r2.context AS ctx, 
+                   r2.confidence_score AS conf, r2.bond_weight AS weight, r2.updated_at as time
+            ORDER BY (r2.confidence_score * r2.bond_weight) DESC, r2.updated_at DESC
+            LIMIT 15
             """
             df_d2 = graph_db.conn.execute(query_d2, {"name": resolved_name, "supernodes": supernodes_list}).get_as_df()
             
             if not df_d2.empty:
                 for _, row in df_d2.iterrows():
-                    indirect_lines.append(f"- Через узел ({row['bridge']}) найдена связь: ({row['bridge']}) - [{row['rel']}] - ({row['target']}) | Контекст: {row['ctx']}")
-                    associated_nodes.add(row['target'])
+                    sig = f"{row['bridge']}-{row['rel']}-{row['target']}"
+                    score = round(row['conf'] * row['weight'], 2)
+                    if sig not in indirect_pool or indirect_pool[sig]['time'] < row['time']:
+                        indirect_pool[sig] = {
+                            "text": f"- ({row['bridge']}) - [{row['rel']}] - ({row['target']}) | Контекст: {row['ctx']} [Relevance: {score}]",
+                            "score": score,
+                            "time": row['time'],
+                            "tgt": row['target']
+                        }
+
+        # ГЛОБАЛЬНАЯ СОРТИРОВКА И ОБРЕЗКА
+        # Сортируем списки словарей по кортежу (score, time) по убыванию
+        sorted_direct = sorted(direct_pool.values(), key=lambda x: (x['score'], x['time']), reverse=True)[:limit_direct]
+        sorted_indirect = sorted(indirect_pool.values(), key=lambda x: (x['score'], x['time']), reverse=True)[:limit_indirect]
+
+        # Извлекаем тексты и узлы для вектора
+        final_direct = []
+        final_indirect =[]
         
-        # Формируем итоговый текст
-        context_blocks = []
-        if direct_lines:
-            context_blocks.append("[Прямые связи]:\n" + "\n".join(list(set(direct_lines))))
-        if indirect_lines:
-            context_blocks.append("[Косвенные ассоциации (Интуиция 2-го уровня)]:\n" + "\n".join(list(set(indirect_lines))))
+        for item in sorted_direct:
+            final_direct.append(item['text'])
+            associated_nodes.add(item['tgt'])
+            
+        for item in sorted_indirect:
+            final_indirect.append(item['text'])
+            associated_nodes.add(item['tgt'])
+
+        context_blocks =[]
+        if final_direct:
+            context_blocks.append("[Прямые связи]:\n" + "\n".join(final_direct))
+        if final_indirect:
+            context_blocks.append("[Косвенные связи]:\n" + "\n".join(final_indirect))
             
         final_text = "\n\n".join(context_blocks) if context_blocks else "Нет релевантных связей в графе."
         

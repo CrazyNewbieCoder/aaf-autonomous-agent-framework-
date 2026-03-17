@@ -3,6 +3,7 @@ import xml.etree.ElementTree as ET
 import os
 from tavily import TavilyClient
 from src.layer00_utils.logger import system_logger
+from src.layer00_utils.config_manager import config
 
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 
@@ -59,9 +60,9 @@ def _read_webpage(url: str) -> str:
         content = response.text
         
         # Защита от переполнения контекста LLM (обрезаем до ~15000 символов)
-        MAX_CHARS = 15000
+        MAX_CHARS = config.llm.limits.max_web_read_chars
         if len(content) > MAX_CHARS:
-            content = content[:MAX_CHARS] + "\n\n... [ВНИМАНИЕ: ОСТАЛЬНАЯ ЧАСТЬ СТРАНИЦЫ ОБРЕЗАНА ИЗ-ЗА ЛИМИТОВ]"
+            content = content[:MAX_CHARS] + "\n\n...[ВНИМАНИЕ: ОСТАЛЬНАЯ ЧАСТЬ СТРАНИЦЫ ОБРЕЗАНА ИЗ-ЗА ЛИМИТОВ]"
             
         system_logger.debug(f"[Web Reader] Прочитана страница: {url}")
         return f"Содержимое страницы {url}:\n\n{content}"

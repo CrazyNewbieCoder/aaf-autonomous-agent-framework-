@@ -30,7 +30,7 @@ class MemoryManager:
         # Формируем задачи: каждый запрос ищем в каждой коллекции
         for query in queries:
             for col in collections:
-                tasks.append(raw_find_entries_in_vector_db(col, query, 3))
+                tasks.append(raw_find_entries_in_vector_db(col, query, config.memory.vector_rag.max_results))
                 
         # Делаем асинхронный залп
         results_lists = await asyncio.gather(*tasks, return_exceptions=True)
@@ -42,7 +42,7 @@ class MemoryManager:
                 all_results.extend(res)
 
         if not all_results:
-            return "В векторной памяти ничего не найдено по данным запросам."
+            return "В векторной памяти ничего не найдено."
 
         # Удаляем дубликаты (по ID записи)
         unique_results = {item['id']: item for item in all_results}.values()
@@ -52,15 +52,15 @@ class MemoryManager:
 
         # Маппинг для красивого вывода
         col_tags = {
-            "user_vector_db": "[ИНФОРМАЦИЯ О ГЛАВНОМ ПОЛЬЗОВАТЕЛЕ (user_vector_db)]",
-            "agent_vector_db": "[БАЗА ЗНАНИЙ (agent_vector_db)]",
-            "agent_thoughts_vector_db": "[ИНТРОСПЕКЦИЯ (agent_thoughts_vector_db)]"
+            "user_vector_db": "[user_vector_db]",
+            "agent_vector_db": "[agent_vector_db]",
+            "agent_thoughts_vector_db": "[agent_thoughts_vector_db]"
         }
 
         # Формируем красивый текст
-        formatted_lines = ["Результаты из ассоциативной памяти (отсортировано по релевантности):"]
-        for res in sorted_results[:10]: # Возвращаем топ-10 лучших совпадений
-            tag = col_tags.get(res['collection'], "[НЕИЗВЕСТНО]")
+        formatted_lines = ["Результаты из ассоциативной памяти:"]
+        for res in sorted_results[:config.memory.vector_rag.max_results]: # Возвращаем топ лучших совпадений
+            tag = col_tags.get(res['collection'], "[Неизвестно]")
             formatted_lines.append(
                 f"{tag} (ID: '{res['id']}' | Дата: {res['date']} | Схожесть: {res['distance']:.3f}): {res['text']}"
             )
@@ -102,7 +102,7 @@ class MemoryManager:
         return result
 
     async def manage_entity(self, action: str, name: str, category: str = None, tier: str = None, description: str = None, status: str = None, context: str = None, rules: str = None) -> str:
-        """Единый пульт управления Картиной мира (Mental State)"""
+        """Единый пульт управления Mental State"""
         if action == "delete":
             return await remove_mental_essence(name)
         elif action == "upsert":
@@ -112,7 +112,7 @@ class MemoryManager:
                 context=context, rules=rules
             )
         else:
-            return "Ошибка: Неизвестное действие. Используйте 'upsert' или 'delete'."
+            return "Ошибка: Неизвестное действие. Доступные: 'upsert' или 'delete'."
 
     async def manage_task(self, action: str, task_id: int = None, description: str = None, status: str = None, term: str = None, context: str = None) -> str:
         """Единый диспетчер задач"""
@@ -135,7 +135,7 @@ class MemoryManager:
             return await delete_task(task_id)
             
         else:
-            return "Ошибка: Неизвестное действие. Используйте 'create', 'update', 'delete' или 'get_all'."
+            return "Ошибка: Неизвестное действие. Доступные: 'create', 'update', 'delete' или 'get_all'."
 
     async def deep_history_search(self, target: str, query: str = None, action_type: str = None, source: str = None, days_ago: int = None, limit: int = 50) -> str:
         """Машина времени для логов и диалогов"""
@@ -192,11 +192,11 @@ class MemoryManager:
                     details_str = str(item.details)
                     if len(details_str) > 150: 
                         details_str = details_str[:150] + "..."
-                    formatted_lines.append(f"[{time_str}] [Действие | {item.action_type}]: {details_str}")
+                    formatted_lines.append(f"[{time_str}] [Action | {item.action_type}]: {details_str}")
                     
             elif hasattr(item, 'actor'):
                 if item.actor == "System":
-                    formatted_lines.append(f"[{time_str}] [Система]: {item.message}")
+                    formatted_lines.append(f"[{time_str}] [System]: {item.message}")
                 elif item.actor == config.identity.agent_name:
                     formatted_lines.append(f"[{time_str}] [{config.identity.agent_name} -> {item.source}]: {item.message}")
                 else:
@@ -239,13 +239,13 @@ class MemoryManager:
         sorted_results = sorted(unique_results, key=lambda x: x['distance'])
 
         col_tags = {
-            "user_vector_db": "[ИНФОРМАЦИЯ О ГЛАВНОМ ПОЛЬЗОВАТЕЛЕ (user_vector_db)]",
-            "agent_vector_db": "[БАЗА ЗНАНИЙ (agent_vector_db)]",
-            "agent_thoughts_vector_db": "[ИНТРОСПЕКЦИЯ (agent_thoughts_vector_db)]"
+            "user_vector_db": "[user_vector_db]",
+            "agent_vector_db": "[agent_vector_db]",
+            "agent_thoughts_vector_db": "[agent_thoughts_vector_db]"
         }
 
-        formatted_lines = ["Результаты из ассоциативной памяти (отсортировано по релевантности):"]
-        for res in sorted_results[:12]: # Увеличили лимит до 12, так как инфы стало больше
+        formatted_lines = ["Результаты из ассоциативной памяти:"]
+        for res in sorted_results[:config.memory.vector_rag.max_results]:
             tag = col_tags.get(res['collection'], "[НЕИЗВЕСТНО]")
             formatted_lines.append(
                 f"{tag} (ID: '{res['id']}' | Дата: {res['date']} | Схожесть: {res['distance']:.3f}): {res['text']}"

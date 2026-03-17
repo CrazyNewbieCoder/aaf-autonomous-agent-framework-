@@ -162,7 +162,7 @@ def register_agent_events(client: TelegramClient):
                         except Exception:
                             topic_title = "Неизвестный топик"
 
-                topic_prefix = f" [Топик: {topic_title} (ID: {topic_id})]"
+                topic_prefix = f"[Топик ID: {topic_id}]"
 
             chat_source = f"tg_agent_group_({chat_id}){topic_prefix}"
             

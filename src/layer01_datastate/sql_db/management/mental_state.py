@@ -1,10 +1,13 @@
 import datetime
 from sqlalchemy import desc, select, delete
-from src.layer01_datastate.sql_db.sql_db import async_session_factory
-from src.layer01_datastate.sql_db.sql_models import MentalStateEntity
+
 from src.layer00_utils.logger import system_logger
 from src.layer00_utils.watchdog.watchdog_decorator import watchdog_decorator
 from src.layer00_utils.watchdog.watchdog import sql_db_module
+from src.layer00_utils.config_manager import config
+
+from src.layer01_datastate.sql_db.sql_db import async_session_factory
+from src.layer01_datastate.sql_db.sql_models import MentalStateEntity
 
 
 # ----------------------------------------------------------------------------------------------
@@ -123,11 +126,13 @@ async def get_all_mental_states() -> str:
                 else:
                     time_ago = f"{minutes} мин. назад"
 
-                # Логика распределения: Фокус или Периферия
+                ttl_hours = config.memory.mental_state.active_focus_ttl_hours
+
+                # Логика распределения: фокус или фон
                 is_active = False
                 if e.tier in ["critical", "high"]:
                     is_active = True
-                elif e.tier == "medium" and hours_passed <= 16: 
+                elif e.tier == "medium" and hours_passed <= ttl_hours:
                     is_active = True
                 
                 if is_active:

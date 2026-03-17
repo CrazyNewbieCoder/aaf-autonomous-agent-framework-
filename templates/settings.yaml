@@ -17,6 +17,7 @@ llm:
   limits:
     max_file_read_chars: 80000 # Макс. количество символов при чтении файлов в Sandbox
     max_web_read_chars: 15000
+    action_details_max_chars: 200
     image_max_size: [1500, 1500]
 
   # Настройка глубины контекста для разных циклов
@@ -25,19 +26,19 @@ llm:
     event_driven:
       thoughts_limit: 5  # Сколько последних n мыслей агента скидывать в контекст
       actions_limit: 15  # Последние n действий агента
-      dialogue_limit: 30 # Последние n записей диалога
+      dialogue_limit: 20 # Последние n записей диалога
       
     # Цикл проактивности
     proactivity:
       thoughts_limit: 8
       actions_limit: 20
-      dialogue_limit: 35
+      dialogue_limit: 25
       
     # Цикл интроспекции
     thoughts:
       thoughts_limit: 10
-      actions_limit: 30
-      dialogue_limit: 40
+      actions_limit: 25
+      dialogue_limit: 30
 
 swarm:
   sybagent_model: "gemini-3.1-flash-lite-preview"
@@ -56,13 +57,23 @@ rhythms:
   weather_poll_sec: 1800 # Интервал сбора погоды
 
 memory:
-  chroma_db_path: "workspace/_data/chroma_db/" # Векторная база
+  mental_state:
+    active_focus_ttl_hours: 12 # Сколько часов сущности уровня medium висят в активном фокусе (после - переходят в фоновую память)
+
+  # Векторная база
+  chroma_db_path: "workspace/_data/chroma_db/"
   similarity_threshold: 0.43 # Порог схожести записей при поиске в ChromaDB
   embedding_model: 
     name: "BAAI/bge-m3"
     local_path: "src/layer00_utils/local_models/models--BAAI--bge-m3" # Локальная модель эмбеддингов (установится автоматически)
+  vector_rag:
+    max_results: 5
 
+  # Графовая база
   kuzu_db_path: "workspace/_data/kuzu_db" # Графовая база
+  graph_rag:
+    max_direct_edges: 10
+    max_indirect_edges: 5
 
   workspace_garbage_collector:
     temp_files_ttl_hours: 48 # Автоудаление временных файлов

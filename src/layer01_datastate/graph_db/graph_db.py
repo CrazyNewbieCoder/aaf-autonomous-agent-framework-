@@ -34,7 +34,7 @@ def _init_kuzu_sync():
         system_logger.info(f"[Graph DB] Создание схемы графа для '{AGENT_NAME}' (Nodes: Concept, Edges: Link)...")
 
         conn.execute("CREATE NODE TABLE Concept(name STRING, type STRING, PRIMARY KEY (name))")
-        conn.execute("CREATE REL TABLE Link(FROM Concept TO Concept, base_type STRING, context STRING, updated_at STRING)")
+        conn.execute("CREATE REL TABLE Link(FROM Concept TO Concept, base_type STRING, context STRING, updated_at STRING, confidence_score DOUBLE, bond_weight DOUBLE)")
 
 async def setup_graph_db():
     """Асинхронная обертка для старта базы"""
