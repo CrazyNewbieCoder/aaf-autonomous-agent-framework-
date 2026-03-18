@@ -47,6 +47,10 @@ class WorkspaceManager:
         if clean_path == "sandbox" or clean_path.startswith("sandbox/"):
             rel_part = clean_path[len("sandbox"):].strip("/")
             target_path = (self.sandbox_dir / rel_part).resolve()
+
+        elif clean_path == "temp" or clean_path.startswith("temp/"):
+            rel_part = clean_path[len("temp"):].strip("/")
+            target_path = (self.temp_dir / rel_part).resolve()
             
         elif clean_path == "src" or clean_path.startswith("src/"):
             rel_part = clean_path[len("src"):].strip("/")
@@ -66,15 +70,26 @@ class WorkspaceManager:
 
         # 4. Тюрьма для Write/Delete
         if mode in ['write', 'delete']:
-            # Защита бедного agent_sdk.py
             if target_path.name == "agent_sdk.py":
-                raise PermissionError("Security: Системный файл 'agent_sdk.py' аппаратно защищен от изменения, перемещения и удаления.")
+                raise PermissionError("Security: Системный файл 'agent_sdk.py' аппаратно защищен.")
                 
+            is_in_sandbox = False
+            is_in_temp = False
+            
             try:
                 target_path.relative_to(self.sandbox_dir.resolve())
-            except ValueError:
-                raise PermissionError(f"Security: Операция '{mode}' разрешена только внутри твоей песочницы (sandbox/). Доступ к '{target_path.as_posix()}' отклонен.")
-
+                is_in_sandbox = True
+            except ValueError: 
+                pass
+            
+            try:
+                target_path.relative_to(self.temp_dir.resolve())
+                is_in_temp = True
+            except ValueError: 
+                pass
+            
+            if not (is_in_sandbox or is_in_temp):
+                raise PermissionError(f"Security: Операция '{mode}' разрешена только внутри 'sandbox/' или 'temp/'.")
         return target_path
 
     def vfs_path_to_display(self, abs_path: Path) -> str:

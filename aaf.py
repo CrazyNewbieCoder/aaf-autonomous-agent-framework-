@@ -80,40 +80,56 @@ def run_cmd(cmd, hide_output=False):
     else:
         subprocess.run(cmd, shell=True)
 
-def auto_migrate_v1():
-    """Переносит данные монолита в мульти-агентную структуру (создает агента VEGA)"""
-    if os.path.exists("workspace") and not os.path.exists("Agents"):
-        print(f"\n{C}=== Обнаружена старая архитектура монолита! ==={W}")
-        print(f"{Y}Начинаю автоматическую миграцию в мульти-агентный режим (v1.1.0)...{W}")
-        
-        vega_path = "Agents/VEGA"
-        os.makedirs(vega_path, exist_ok=True)
-        
-        # Переносим workspace
-        if os.path.exists("workspace"):
-            shutil.move("workspace", f"{vega_path}/workspace")
-        # Переносим config
-        if os.path.exists("config"):
-            shutil.move("config", f"{vega_path}/config")
-        # Переносим .env
-        if os.path.exists(".env"):
-            shutil.move(".env", f"{vega_path}/.env")
-        # Переносим логи
-        if os.path.exists("src/logs"):
-            os.makedirs(f"{vega_path}/logs", exist_ok=True)
-            for f in os.listdir("src/logs"):
-                shutil.move(os.path.join("src/logs", f), os.path.join(f"{vega_path}/logs", f))
-            shutil.rmtree("src/logs")
-            
-        print(f"{G}[V] Данные успешно мигрированы в профиль 'VEGA'!{W}\n")
-        generate_docker_compose()
+def recursive_merge(template_dict, target_dict):
+    """Рекурсивно дополняет target_dict недостающими ключами из template_dict"""
+    is_modified = False
+    for key, value in template_dict.items():
+        if key not in target_dict:
+            target_dict[key] = value
+            is_modified = True
+        elif isinstance(value, dict) and isinstance(target_dict[key], dict):
+            if recursive_merge(value, target_dict[key]):
+                is_modified = True
+    return is_modified
+
+def patch_agent_configs(agent_target: str):
+    """Проверяет settings.yaml агентов и дописывает недостающие поля из шаблона"""
+    agents_to_patch =[]
+    if agent_target.lower() == "all":
+        if os.path.exists("Agents"):
+            agents_to_patch =[d for d in os.listdir("Agents") if os.path.isdir(os.path.join("Agents", d))]
+    else:
+        agents_to_patch = [agent_target.upper()]
+
+    template_path = os.path.join("templates", "settings.yaml")
+    if not os.path.exists(template_path):
+        return
+
+    with open(template_path, "r", encoding="utf-8") as f:
+        template_data = yaml.safe_load(f)
+
+    for agent in agents_to_patch:
+        target_path = os.path.join("Agents", agent, "config", "settings.yaml")
+        if not os.path.exists(target_path):
+            continue
+
+        with open(target_path, "r", encoding="utf-8") as f:
+            target_data = yaml.safe_load(f)
+
+        if target_data is None:
+            target_data = {}
+
+        if recursive_merge(template_data, target_data):
+            print(f"{Y}[i] Конфигурация агента '{agent}' автоматически обновлена до актуальной версии (добавлены новые поля).{W}")
+            with open(target_path, "w", encoding="utf-8") as f:
+                yaml.dump(target_data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
 
 def generate_docker_compose():
     """Генерирует идеальный docker-compose.yml на основе папок в Agents/"""
     host_tz = get_host_tz() # Получаем часовой пояс хоста
     
     compose = {
-        "version": "3.8",
+        # Ключ "version" удален, так как в новых версиях Docker Compose он obsolete (вызывает warning)
         "services": {
             "postgres_db": {
                 "image": "postgres:15-alpine",
@@ -124,7 +140,13 @@ def generate_docker_compose():
                     "POSTGRES_DB": "agent_core_db",
                     "TZ": host_tz # Синхронизируем время БД
                 },
-                "volumes": ["agent_pg_data:/var/lib/postgresql/data"]
+                "volumes": ["agent_pg_data:/var/lib/postgresql/data"],
+                "healthcheck": {
+                    "test": ["CMD-SHELL", "pg_isready -U postgres -d agent_core_db"],
+                    "interval": "5s",
+                    "timeout": "5s",
+                    "retries": 10
+                }
             },
             "sandbox_engine": {
                 "image": "docker:24-dind",
@@ -132,7 +154,14 @@ def generate_docker_compose():
                 "privileged": True,
                 "environment": {"DOCKER_TLS_CERTDIR": ""},
                 "command": "--host=tcp://0.0.0.0:2375",
-                "volumes": ["./Agents:/app/Agents"]
+                "volumes": ["./Agents:/app/Agents"],
+                "healthcheck": {
+                    "test": ["CMD", "docker", "info"],
+                    "interval": "5s",
+                    "timeout": "5s",
+                    "retries": 10,
+                    "start_period": "5s"
+                }
             }
         },
         "volumes": {"agent_pg_data": None}
@@ -152,10 +181,13 @@ def generate_docker_compose():
                             "AGENT_NAME": agent_name
                         }
                     },
-                    "depends_on": ["postgres_db", "sandbox_engine"],
+                    "depends_on": {
+                        "postgres_db": {"condition": "service_healthy"},
+                        "sandbox_engine": {"condition": "service_healthy"}
+                    },
                     "restart": "on-failure",
-                    "env_file": [f"./Agents/{agent_name}/.env"],
-                    "environment": [
+                    "env_file":[f"./Agents/{agent_name}/.env"],
+                    "environment":[
                         f"AGENT_NAME={agent_name}",
                         "DOCKER_HOST=tcp://sandbox_engine:2375",
                         f"TZ={host_tz}" # Синхронизируем время агента
@@ -163,7 +195,7 @@ def generate_docker_compose():
                     "networks": {
                         "default": {"aliases": [alias]}
                     },
-                    "volumes": [
+                    "volumes":[
                         f"./Agents/{agent_name}:/app/Agents/{agent_name}",
                         "./src:/app/src",
                         "./src/layer00_utils/local_models:/app/src/layer00_utils/local_models",
@@ -427,8 +459,8 @@ def process_command(args_list):
         print(f"  {G}auth <NAME>{W}          - Авторизовать Telegram для агента")
         print(f"  {G}start <NAME | all>{W}   - Запустить агента (или всех)")
         print(f"  {G}stop <NAME | all>{W}    - Остановить агента (или всех)")
-        print(f"  {G}restart <NAME | all>{W}- Перезапустить агента (или всех)") # НОВОЕ
-        print(f"  {G}delete <NAME>{W}        - Полностью удалить профиль агента") # НОВОЕ
+        print(f"  {G}restart <NAME | all>{W} - Перезапустить агента (или всех)")
+        print(f"  {G}delete <NAME>{W}        - Полностью удалить профиль агента")
         print(f"  {G}logs <NAME>{W}          - Смотреть логи агента в реальном времени")
         print(f"  {G}generate{W}             - Пересобрать docker-compose.yml")
         print(f"  {G}exit{W}                 - Выйти из AAF Manager\n")
@@ -456,6 +488,10 @@ def process_command(args_list):
     elif args.command == "start":
         check_and_download_models()
         check_docker()
+
+        agent_target = args.agent if args.agent else "all"
+        patch_agent_configs(agent_target)
+
         generate_docker_compose()
         if not args.agent or args.agent.lower() == "all":
             print(f"{Y}Запуск всей инфраструктуры и всех агентов...{W}")
@@ -551,8 +587,6 @@ def interactive_mode():
             print(f"{R}Ошибка: {e}{W}")
 
 def main():
-    auto_migrate_v1() # Тихая миграция при старте, если нужно
-    
     # Если скрипт запущен без аргументов -> запускаем интерактивную консоль
     if len(sys.argv) == 1:
         interactive_mode()

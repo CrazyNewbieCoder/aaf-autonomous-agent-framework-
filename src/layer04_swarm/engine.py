@@ -60,8 +60,13 @@ async def _execute_tool(subagent, tool_call):
             for param_name, param in sig.parameters.items():
                 if param_name in args:
                     val = args[param_name]
-                    if param.annotation is int and isinstance(val, str) and val.strip().lstrip('-').isdigit():
-                        args[param_name] = int(val)
+                    # Каст для int
+                    if param.annotation is int and isinstance(val, (str, float)):
+                        args[param_name] = int(float(val))
+                    # Каст для float
+                    elif param.annotation is float and isinstance(val, str):
+                        args[param_name] = float(val)
+                    # Каст для bool
                     elif param.annotation is bool and isinstance(val, str):
                         args[param_name] = val.lower() in ['true', '1', 'yes']
         except Exception:
@@ -91,10 +96,15 @@ async def _execute_tool(subagent, tool_call):
             for param_name, param in sig.parameters.items():
                 if param_name in args:
                     val = args[param_name]
-                    if param.annotation is int and isinstance(val, str) and val.strip().lstrip('-').isdigit():
-                        args[param_name] = int(val)
+                    # Каст для int
+                    if param.annotation is int and isinstance(val, (str, float)):
+                        args[param_name] = int(float(val))
+                    # Каст для float
+                    elif param.annotation is float and isinstance(val, str):
+                        args[param_name] = float(val)
+                    # Каст для bool
                     elif param.annotation is bool and isinstance(val, str):
-                        args[param_name] = val.lower() in['true', '1', 'yes']
+                        args[param_name] = val.lower() in ['true', '1', 'yes']
         except Exception:
             pass
 

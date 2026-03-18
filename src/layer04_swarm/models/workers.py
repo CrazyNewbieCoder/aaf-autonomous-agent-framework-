@@ -29,8 +29,9 @@ class BaseWorker(BaseSubagent):
             from src.layer00_utils.workspace import workspace_manager
             import asyncio
             
-            filename = f"swarm_{self.role}_report_{self.name}.md"
-            vfs_path = f"sandbox/{filename}"
+            filename = f"latest_{self.role}_report.md"
+            vfs_path = f"temp/{filename}"
+            
             filepath = workspace_manager.resolve_vfs_path(vfs_path, mode='write')
             
             def _write():
@@ -41,10 +42,10 @@ class BaseWorker(BaseSubagent):
             # Добавляем в отчет инфу о корневой миссии, если это конец цепочки
             mission_info = f" (Миссия от: {self.parent_name})" if self.parent_name else ""
             
-            if len(result) < 6000:
+            if len(result) < 8000:
                 event_msg = f"Отчет субагента '{self.name}'{mission_info}:\n\n{result}"
             else:
-                event_msg = f"Задача выполнена{mission_info}. Отчет слишком большой. Прочитай файл '{vfs_path}' через инструмент 'read_file'."
+                event_msg = f"Задача выполнена{mission_info}. Отчет слишком большой. Рекомендуется прочитать '{vfs_path}' через сооветствующий инструмент."
                 
             await event_bus.publish(Events.SWARM_INFO, source=self.name, result=event_msg)
             await self.die(final_status="completed")

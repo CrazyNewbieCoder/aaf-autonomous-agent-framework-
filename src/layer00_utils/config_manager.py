@@ -59,6 +59,7 @@ class GarbageCollectorConfig(BaseModel):
 class SwarmConfig(BaseModel):
     sybagent_model: str
     max_sybagent_steps: int
+    report_max_chars: int
 
 class GraphRagConfig(BaseModel):
     max_direct_edges: int

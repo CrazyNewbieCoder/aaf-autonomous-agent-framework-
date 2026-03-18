@@ -45,6 +45,7 @@ llm:
 swarm:
   sybagent_model: "gemini-3.1-flash-lite-preview"
   max_sybagent_steps: 10
+  report_max_chars: 8000
 
 
 rhythms:
