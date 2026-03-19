@@ -75,16 +75,31 @@ def check_docker():
         sys.exit(1)
 
 def build_sandbox_base(force_rebuild=False):
-    """Создает базовый образ для песочницы со всеми нужными утилитами (ffmpeg, curl, и т.д.)"""
+    """Создает базовый образ ВНУТРИ изолированного DinD-движка песочницы"""
     image_name = "aaf-sandbox-base:latest"
     
-    if not force_rebuild:
-        # Проверяем, существует ли уже образ
-        result = subprocess.run(["docker", "images", "-q", image_name], capture_output=True, text=True)
-        if result.stdout.strip():
-            return # Образ уже есть, пропускаем
+    # 1. Сначала поднимаем только sandbox_engine, чтобы туда можно было достучаться
+    print(f"{C}[i] Запуск Sandbox Engine для сборки базового образа...{W}")
+    run_cmd("docker compose up -d sandbox_engine", hide_output=True)
+    
+    # 2. Ждем, пока внутренний Docker-демон проснется
+    import time
+    for _ in range(15):
+        res = subprocess.run(["docker", "compose", "exec", "sandbox_engine", "docker", "info"], capture_output=True)
+        if res.returncode == 0:
+            break
+        time.sleep(1)
+    else:
+        print(f"{R}[X] Ошибка: Docker DinD не запустился вовремя.{W}")
+        sys.exit(1)
 
-    print(f"{Y}[i] Сборка базового образа песочницы ({image_name}).{W}")
+    if not force_rebuild:
+        # Проверяем, есть ли образ внутри DinD
+        res = subprocess.run(["docker", "compose", "exec", "sandbox_engine", "docker", "images", "-q", image_name], capture_output=True, text=True)
+        if res.stdout.strip():
+            return # Образ уже есть в DinD
+            
+    print(f"{Y}[i] Сборка базового образа песочницы ({image_name}) внутри DinD.{W}")
     dockerfile_content = """
 FROM python:3.11-slim
 RUN apt-get update && apt-get install -y \\
@@ -97,18 +112,24 @@ RUN apt-get update && apt-get install -y \\
 WORKDIR /app
 """
     
-    with open("Dockerfile.sandbox", "w", encoding="utf-8") as f:
+    # Создаем Dockerfile в примонтированной папке Agents (она проброшена в sandbox_engine)
+    os.makedirs("Agents", exist_ok=True)
+    temp_df = os.path.join("Agents", "Dockerfile.sandbox.tmp")
+    with open(temp_df, "w", encoding="utf-8") as f:
         f.write(dockerfile_content.strip())
         
     try:
-        subprocess.run(["docker", "build", "-t", image_name, "-f", "Dockerfile.sandbox", "."], check=True)
+        # Собираем образ ВНУТРИ DinD, используя пустую папку /tmp/build как контекст 
+        # (чтобы не грузить гигабайты файлов БД в демон)
+        cmd = "mkdir -p /tmp/build && cp /app/Agents/Dockerfile.sandbox.tmp /tmp/build/Dockerfile && cd /tmp/build && docker build -t aaf-sandbox-base:latest ."
+        subprocess.run(["docker", "compose", "exec", "sandbox_engine", "sh", "-c", cmd], check=True)
         print(f"{G}[V] Базовый образ песочницы успешно собран.{W}")
     except subprocess.CalledProcessError:
         print(f"{R}[X] Ошибка при сборке базового образа песочницы.{W}")
         sys.exit(1)
     finally:
-        if os.path.exists("Dockerfile.sandbox"):
-            os.remove("Dockerfile.sandbox")
+        if os.path.exists(temp_df):
+            os.remove(temp_df)
 
 def run_cmd(cmd, hide_output=False):
     if hide_output:
@@ -524,12 +545,15 @@ def process_command(args_list):
     elif args.command == "start":
         check_and_download_models()
         check_docker()
-        build_sandbox_base(force_rebuild=False)
 
         agent_target = args.agent if args.agent else "all"
         patch_agent_configs(agent_target)
 
-        generate_docker_compose()
+        # 1. Сначала генерируем compose
+        generate_docker_compose() 
+        # 2. Потом собираем базу (она поднимет engine)
+        build_sandbox_base(force_rebuild=False) 
+
         if not args.agent or args.agent.lower() == "all":
             print(f"{Y}Запуск всей инфраструктуры и агентов.{W}")
             run_cmd("docker compose up -d --build")
@@ -586,11 +610,15 @@ def process_command(args_list):
     elif args.command == "rebuild":
         check_and_download_models()
         check_docker()
-        build_sandbox_base(force_rebuild=True)
 
         agent_target = args.agent if args.agent else "all"
         patch_agent_configs(agent_target)
+        
+        # 1. Сначала генерируем compose
         generate_docker_compose()
+        
+        # 2. Потом принудительно собираем базу
+        build_sandbox_base(force_rebuild=True)
 
         if not args.agent or args.agent.lower() == "all":
             print(f"{Y}Пересборка всех образов без кэша.{W}")
