@@ -20,7 +20,7 @@ db = None
 conn = None
 
 def _init_kuzu_sync():
-    """Синхронная инициализация KuzuDB и создание схемы (если её нет)"""
+    """Синхронная инициализация KuzuDB и создание/обновление схемы"""
     global db, conn
     
     Path(GRAPH_DB_PATH).parent.mkdir(parents=True, exist_ok=True)
@@ -28,13 +28,30 @@ def _init_kuzu_sync():
     db = kuzu.Database(GRAPH_DB_PATH)
     conn = kuzu.Connection(db)
     
+    # 1. Проверка базовой инициализации (существуют ли таблицы вообще)
     try:
         conn.execute("MATCH (n:Concept) RETURN n LIMIT 1")
     except RuntimeError:
         system_logger.info(f"[Graph DB] Создание схемы графа для '{AGENT_NAME}' (Nodes: Concept, Edges: Link)...")
-
         conn.execute("CREATE NODE TABLE Concept(name STRING, type STRING, PRIMARY KEY (name))")
+        # Создаем сразу с новыми полями, чтобы избежать миграций на чистой БД
         conn.execute("CREATE REL TABLE Link(FROM Concept TO Concept, base_type STRING, context STRING, updated_at STRING, confidence_score DOUBLE, bond_weight DOUBLE)")
+        return # Выходим, так как база чистая и миграции не нужны
+
+    # 2. Миграции для старых баз данных (v1.1.0 -> v1.2.0)
+    # Проверяем и добавляем поле confidence_score
+    try:
+        conn.execute("MATCH ()-[r:Link]->() RETURN r.confidence_score LIMIT 1")
+    except RuntimeError:
+        system_logger.warning("[Graph DB] Выполняется миграция схемы: добавление поля 'confidence_score'...")
+        conn.execute("ALTER TABLE Link ADD confidence_score DOUBLE DEFAULT 1.0")
+
+    # Проверяем и добавляем поле bond_weight
+    try:
+        conn.execute("MATCH ()-[r:Link]->() RETURN r.bond_weight LIMIT 1")
+    except RuntimeError:
+        system_logger.warning("[Graph DB] Выполняется миграция схемы: добавление поля 'bond_weight'...")
+        conn.execute("ALTER TABLE Link ADD bond_weight DOUBLE DEFAULT 1.0")
 
 async def setup_graph_db():
     """Асинхронная обертка для старта базы"""

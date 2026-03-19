@@ -109,7 +109,11 @@ async def change_llm_model(new_model: str) -> str:
         react_module.LLM_MODEL = new_model
         
         current_dir = Path(__file__).resolve()
-        yaml_path = current_dir.parents[4] / "config" / "settings.yaml"
+        src_dir = next((p for p in current_dir.parents if p.name == "src"), None)
+        project_root = src_dir.parent if src_dir else current_dir.parents[4]
+        
+        from src.layer00_utils.env_manager import AGENT_NAME
+        yaml_path = project_root / "Agents" / AGENT_NAME / "config" / "settings.yaml"
         
         if not yaml_path.exists():
             return f"Модель изменена в памяти на '{new_model}', но файл settings.yaml не найден для сохранения."

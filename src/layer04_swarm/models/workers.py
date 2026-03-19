@@ -29,8 +29,9 @@ class BaseWorker(BaseSubagent):
             from src.layer00_utils.workspace import workspace_manager
             import asyncio
             
-            filename = f"swarm_{self.role}_report_{self.name}.md"
-            vfs_path = f"sandbox/{filename}"
+            filename = f"latest_{self.role}_report.md"
+            vfs_path = f"temp/{filename}"
+            
             filepath = workspace_manager.resolve_vfs_path(vfs_path, mode='write')
             
             def _write():
@@ -41,10 +42,10 @@ class BaseWorker(BaseSubagent):
             # Добавляем в отчет инфу о корневой миссии, если это конец цепочки
             mission_info = f" (Миссия от: {self.parent_name})" if self.parent_name else ""
             
-            if len(result) < 6000:
+            if len(result) < 8000:
                 event_msg = f"Отчет субагента '{self.name}'{mission_info}:\n\n{result}"
             else:
-                event_msg = f"Задача выполнена{mission_info}. Отчет слишком большой. Прочитай файл '{vfs_path}' через инструмент 'read_file'."
+                event_msg = f"Задача выполнена{mission_info}. Отчет слишком большой. Рекомендуется прочитать '{vfs_path}' через сооветствующий инструмент."
                 
             await event_bus.publish(Events.SWARM_INFO, source=self.name, result=event_msg)
             await self.die(final_status="completed")
@@ -62,7 +63,8 @@ class Researcher(BaseWorker):
         super().__init__(db_record)
         self.allowed_tools = [
             "web_search", "read_webpage", "deep_research", "get_habr_articles", "get_habr_news", "recall_memory", 
-            "delegate_task_to_swarm", "escalate_to_lead", "write_file", "read_file"
+            "delegate_task_to_swarm", "escalate_to_lead", "write_file", "read_file",
+            "analyze_local_image", "transcribe_local_file",
         ]
         self.system_prompt = f"""
 Ты OSINT-исследователь '{self.name}', специализированный субагент Agent Swarm System. твой главный агент - {config.identity.agent_name}.
@@ -82,7 +84,8 @@ class SystemAnalyst(BaseWorker):
     def __init__(self, db_record):
         super().__init__(db_record)
         self.allowed_tools = [
-            "read_file", "get_tree", "read_recent_logs", "write_file", "delegate_task_to_swarm", "escalate_to_lead"
+            "read_file", "get_tree", "read_recent_logs", "write_file", "delegate_task_to_swarm", "escalate_to_lead",
+            "analyze_local_image", "transcribe_local_file",
         ]
         self.system_prompt = f"""
 Ты системный аналитик '{self.name}', инженерный субагент Agent Swarm System. твой главный агент - {config.identity.agent_name}.
@@ -106,7 +109,8 @@ class ChatSummarizer(BaseWorker):
         super().__init__(db_record)
         self.allowed_tools = [
             "read_chat_as_agent", "get_channel_posts_as_agent", "get_post_comments_as_agent", "get_chat_info_as_agent",
-            "delegate_task_to_swarm", "escalate_to_lead", "write_file", "read_file"
+            "delegate_task_to_swarm", "escalate_to_lead", "write_file", "read_file",
+            "analyze_local_image", "transcribe_local_file",
         ]
         self.system_prompt = f"""
 Ты аналитик коммуникаций '{self.name}', субагент Agent Swarm System. твой главный агент - {config.identity.agent_name}.
@@ -133,7 +137,8 @@ class Chronicler(BaseWorker):
         super().__init__(db_record)
         self.allowed_tools = [
             "get_full_graph", "explore_graph", "delete_from_graph", "recall_memory", "forget_information", "get_all_vector_memory",
-            "delegate_task_to_swarm", "escalate_to_lead", "write_file", "read_file"
+            "delegate_task_to_swarm", "escalate_to_lead", "write_file", "read_file",
+            "analyze_local_image", "transcribe_local_file",
         ]
         self.system_prompt = f"""
 Ты архивариус '{self.name}', специализированный субагент-уборщик Agent Swarm System. Твой главный агент - {config.identity.agent_name}.

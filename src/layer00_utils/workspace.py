@@ -39,14 +39,27 @@ class WorkspaceManager:
             
         clean_path = vfs_path.replace("\\", "/").strip("/")
         
-        # 1. Защита от .env
+        # Защита от дурака (нейросети): Если агент прислал абсолютный путь из логов
+        # Вырезаем всё до слова sandbox или src
+        if "/workspace/sandbox/" in clean_path:
+            clean_path = "sandbox/" + clean_path.split("/workspace/sandbox/")[-1]
+        elif "/src/" in clean_path:
+            clean_path = "src/" + clean_path.split("/src/")[-1]
+        elif clean_path.startswith("file:///"):
+            clean_path = clean_path.replace("file:///", "")
+        
+        # Защита от .env
         if ".env" in clean_path.split("/") or clean_path.endswith(".env"):
             raise PermissionError("Security: Доступ к файлам окружения (.env) строго запрещен.")
 
-        # 2. Умный маппинг псевдонимов (чтобы агенту не нужно было писать Agents/VEGA/workspace/...)
+        # Умный маппинг псевдонимов (чтобы агенту не нужно было писать Agents/VEGA/workspace/...)
         if clean_path == "sandbox" or clean_path.startswith("sandbox/"):
             rel_part = clean_path[len("sandbox"):].strip("/")
             target_path = (self.sandbox_dir / rel_part).resolve()
+
+        elif clean_path == "temp" or clean_path.startswith("temp/"):
+            rel_part = clean_path[len("temp"):].strip("/")
+            target_path = (self.temp_dir / rel_part).resolve()
             
         elif clean_path == "src" or clean_path.startswith("src/"):
             rel_part = clean_path[len("src"):].strip("/")
@@ -66,11 +79,26 @@ class WorkspaceManager:
 
         # 4. Тюрьма для Write/Delete
         if mode in ['write', 'delete']:
+            if target_path.name == "agent_sdk.py":
+                raise PermissionError("Security: Системный файл 'agent_sdk.py' аппаратно защищен.")
+                
+            is_in_sandbox = False
+            is_in_temp = False
+            
             try:
                 target_path.relative_to(self.sandbox_dir.resolve())
-            except ValueError:
-                raise PermissionError(f"Security: Операция '{mode}' разрешена ТОЛЬКО внутри твоей песочницы (sandbox/). Доступ к '{target_path.as_posix()}' отклонен.")
-
+                is_in_sandbox = True
+            except ValueError: 
+                pass
+            
+            try:
+                target_path.relative_to(self.temp_dir.resolve())
+                is_in_temp = True
+            except ValueError: 
+                pass
+            
+            if not (is_in_sandbox or is_in_temp):
+                raise PermissionError(f"Security: Операция '{mode}' разрешена только внутри 'sandbox/' или 'temp/'.")
         return target_path
 
     def vfs_path_to_display(self, abs_path: Path) -> str:

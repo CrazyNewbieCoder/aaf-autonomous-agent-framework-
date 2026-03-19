@@ -22,18 +22,20 @@ class EventConfig(BaseModel):
 
 # Далее описываем события как объекты
 class Events:
-    # -----------------------------------------------------------
+
+    # ============================================
     # Telegram
+    # ============================================
 
     AGENT_NEW_INCOMING_MESSAGE_TG = EventConfig(
         name="AGENT_NEW_INCOMING_MESSAGE_TG",
-        description="Новое личное сообщение на официальный аккаунт агента",
+        description="Новое личное сообщение на аккаунт агента",
         requires_attention=True,
         level=EventLevel.HIGH,
     )
     AGENT_NEW_MENTION_TG = EventConfig(
         name="AGENT_NEW_MENTION_TG",
-        description="Упоминание аккаунта агента в группе/чате",
+        description="Упоминание агента в группе/чате",
         requires_attention=True,
         level=EventLevel.MEDIUM,
     )
@@ -52,18 +54,10 @@ class Events:
         level=EventLevel.LOW, 
     )
 
-    # -----------------------------------------------------------
-    # PC
 
-    NEW_FILE_IN_SYSTEM = EventConfig(
-        name="NEW_FILE_IN_SYSTEM",
-        description="Новый файл на основном ПК",
-        requires_attention=True,
-        level=EventLevel.LOW,
-    )
-
-    # -----------------------------------------------------------
+    # ============================================
     # Общие события
+    # ============================================
 
     WEATHER_ALERT = EventConfig(
         name="WEATHER_ALERT",
@@ -85,7 +79,7 @@ class Events:
     )
     SYSTEM_MODULE_HEARTBEAT = EventConfig(
         name="SYSTEM_MODULE_HEARTBEAT",
-        description="Системный модуль дает пинг о том, что он живой",
+        description="Системный модуль дает ping о том, что он живой",
         requires_attention=False, # Системное событие
         level=EventLevel.INFO,
     )
@@ -96,44 +90,57 @@ class Events:
         level=EventLevel.CRITICAL,
     )
 
-    # -----------------------------------------------------------
+
+    # ============================================
     # Agent Swarm
+    # ============================================
     
     SWARM_INFO = EventConfig(
         name="SWARM_INFO",
-        description="Отчет от субагента об успешном выполнении задачи.",
+        description="Отчет от субагента об успешном выполнении задачи",
         requires_attention=True,
         level=EventLevel.MEDIUM, 
     )
     SWARM_ALERT = EventConfig(
         name="SWARM_ALERT",
-        description="Уведомление от Daemon субагента (сработал триггер).",
+        description="Уведомление от Daemon субагента (сработал триггер)",
         requires_attention=True,
         level=EventLevel.HIGH, 
     )
     SWARM_ERROR = EventConfig(
         name="SWARM_ERROR",
-        description="Процесс роя упал с ошибкой.",
+        description="Процесс роя упал с ошибкой",
         requires_attention=True,
         level=EventLevel.MEDIUM, 
     )
 
-    # -----------------------------------------------------------
+
+    # ============================================
     # Sandbox (Песочница)
+    # ============================================
     
     SANDBOX_ATTENTION_REQUIRED = EventConfig(
         name="SANDBOX_ATTENTION_REQUIRED",
-        description="Фоновый скрипт из песочницы прислал экстренное уведомление.",
+        description="Фоновый скрипт из песочницы прислал уведомление",
         requires_attention=True,
         level=EventLevel.HIGH,
     )
 
-    # -----------------------------------------------------------
-    # WebHook
-
     EXTERNAL_WEBHOOK_RECEIVED = EventConfig(
         name="EXTERNAL_WEBHOOK_RECEIVED",
-        description="Получен входящий Webhook (POST-запрос) от внешнего сервиса.",
+        description="Внешняя система прислала данные на сгенерированный агентом webhook-URL",
+        requires_attention=True,
+        level=EventLevel.HIGH, 
+    )
+
+
+    # ============================================
+    # Deployments
+    # ============================================
+
+    DEPLOYMENT_CRASHED = EventConfig(
+        name="DEPLOYMENT_CRASHED",
+        description="Запущенный микросервис/проект упал с ошибкой",
         requires_attention=True,
         level=EventLevel.HIGH, 
     )

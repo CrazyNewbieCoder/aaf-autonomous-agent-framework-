@@ -1,5 +1,7 @@
 import asyncio
 import os
+import socket
+
 from src.layer00_utils.logger import system_logger
 from src.layer00_utils.workspace import workspace_manager
 from src.layer00_utils.env_manager import AGENT_NAME
@@ -35,22 +37,26 @@ async def execute_once(vfs_filepath: str, timeout: int = 120) -> str:
         system_logger.info(f"[Sandbox] Запуск '{vfs_filepath}' в Docker DinD (Агент: {AGENT_NAME}, Таймаут: {timeout}с).")
 
         sandbox_root_in_docker = f"/app/Agents/{AGENT_NAME}/workspace/sandbox"
-        
-        # Устанавливаем рабочую директорию прямо в папку со скриптом
         working_dir_in_docker = f"{sandbox_root_in_docker}/{script_dir}" if script_dir else sandbox_root_in_docker
 
-        docker_cmd = [
+        agent_alias = f"agent_{AGENT_NAME.lower()}"
+        try:
+            agent_ip = socket.gethostbyname(agent_alias)
+        except Exception:
+            agent_ip = agent_alias
+
+        docker_cmd =[
             "docker", "run",
             "--rm",                                         
             "--memory=1g",                                  
             "--cpus=1",                                     
             "--pids-limit=100", 
             "--network=host",
-            "-e", f"MASTER_AGENT=agent_{AGENT_NAME.lower()}",
+            "-e", f"MASTER_AGENT={agent_ip}", # Пробрасываем чистый IP
             "-e", f"TZ={os.getenv('TZ', 'UTC')}",
             "-v", f"{sandbox_root_in_docker}:{sandbox_root_in_docker}",         
             "-w", working_dir_in_docker,
-            "python:3.11-slim",                             
+            "aaf-sandbox-base:latest",                             
             "python", script_name                              
         ]
 

@@ -1,5 +1,7 @@
 import os
 import subprocess
+import socket
+
 from src.layer00_utils.logger import system_logger
 from src.layer00_utils.workspace import workspace_manager
 from src.layer00_utils.env_manager import AGENT_NAME
@@ -48,19 +50,24 @@ def _start_background_python_script(filename: str) -> str:
     
     sandbox_path = f"/app/Agents/{AGENT_NAME}/workspace/sandbox"
 
-    docker_cmd = [
+    agent_alias = f"agent_{AGENT_NAME.lower()}"
+    try:
+        agent_ip = socket.gethostbyname(agent_alias)
+    except Exception:
+        agent_ip = agent_alias
+
+    docker_cmd =[
         "docker", "run", "-d",                          
         "--name", container_name,                       
         "--memory=512m",                                
         "--cpus=1.0",                                   
         "--pids-limit=50",
         "--network=host", 
-        # Передаем имя агента внутрь демона
-        "-e", f"MASTER_AGENT=agent_{AGENT_NAME.lower()}",
+        "-e", f"MASTER_AGENT={agent_ip}", # Пробрасываем чистый IP
         "-e", f"TZ={os.getenv('TZ', 'UTC')}",
         "-v", f"{sandbox_path}:{sandbox_path}",
-        "-w", sandbox_path,                 
-        "python:3.11-slim",                             
+        "-w", sandbox_path,
+        "aaf-sandbox-base:latest",
         "python", filename                              
     ]
 

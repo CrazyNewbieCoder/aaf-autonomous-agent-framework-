@@ -29,7 +29,8 @@ class LLMConfig(BaseModel):
     model_config = {"protected_namespaces": ()} # Это заставит Pydantic заткнуться про "model_"
     
     model_name: str
-    vision_model: str 
+    is_main_model_multimodal: bool
+    multimodal_model: str
     available_models: List[str]
     temperature: float
     max_react_steps: int
@@ -59,6 +60,7 @@ class GarbageCollectorConfig(BaseModel):
 class SwarmConfig(BaseModel):
     sybagent_model: str
     max_sybagent_steps: int
+    report_max_chars: int
 
 class GraphRagConfig(BaseModel):
     max_direct_edges: int
